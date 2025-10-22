@@ -818,259 +818,196 @@ def show_ai_recommendations():
         if input_features['higher'] == 'no':
             st.warning("🎓 Limited higher education plans")
 
-def show_data_analysis():
-    """Display comprehensive model selection and performance analysis"""
-    st.header("📊 Model Selection & Performance Analysis")
+def show_data_table():
+    """Display the complete dataset in an interactive table"""
+    st.header("📋 Complete Dataset")
     
-    if not st.session_state.model_trained:
-        st.warning("Please initialize the prediction model from the Home page first.")
+    if not hasattr(st.session_state.predictor, 'df') or st.session_state.predictor.df is None:
+        st.warning("No data available. Please initialize the model first.")
         return
     
-    # Create tabs for different analysis aspects
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Model Comparison", 
-        "🎯 Residual Analysis",
-        "📉 Prediction Accuracy",
-        "🔍 Feature Importance"
-    ])
+    df = st.session_state.predictor.df
     
-    with tab1:
-        st.subheader("Model Performance Comparison")
-        
-        # Create comprehensive model comparison data
-        models_performance = {
-            'Random Forest': {'R2': 0.82, 'RMSE': 1.45, 'MAE': 1.12, 'Training Time': 12.3},
-            'Gradient Boosting': {'R2': 0.79, 'RMSE': 1.52, 'MAE': 1.18, 'Training Time': 15.7},
-            'Linear Regression': {'R2': 0.68, 'RMSE': 1.85, 'MAE': 1.45, 'Training Time': 2.1},
-            'Support Vector Machine': {'R2': 0.72, 'RMSE': 1.73, 'MAE': 1.32, 'Training Time': 28.9},
-            'Neural Network': {'R2': 0.80, 'RMSE': 1.48, 'MAE': 1.15, 'Training Time': 45.2}
-        }
-        
-        # Convert to DataFrame
-        perf_df = pd.DataFrame(models_performance).T
-        perf_df = perf_df.sort_values('R2', ascending=False)
-        
-        # Create visualization
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        
-        # R² comparison with enhanced styling
-        models = perf_df.index
-        r2_scores = perf_df['R2']
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
-        
-        bars1 = axes[0,0].bar(models, r2_scores, color=colors, alpha=0.8, edgecolor='black')
-        axes[0,0].set_title('Model Comparison by R² Score\n(Higher is Better)', fontsize=14, fontweight='bold')
-        axes[0,0].set_ylabel('R² Score', fontweight='bold')
-        axes[0,0].tick_params(axis='x', rotation=45)
-        axes[0,0].grid(True, alpha=0.3, axis='y')
-        
-        # Add value labels on bars
-        for bar in bars1:
-            height = bar.get_height()
-            axes[0,0].text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                          f'{height:.3f}', ha='center', va='bottom', fontweight='bold')
-        
-        # RMSE comparison
-        rmse_scores = perf_df['RMSE']
-        bars2 = axes[0,1].bar(models, rmse_scores, color=colors, alpha=0.8, edgecolor='black')
-        axes[0,1].set_title('Model Comparison by RMSE\n(Lower is Better)', fontsize=14, fontweight='bold')
-        axes[0,1].set_ylabel('RMSE', fontweight='bold')
-        axes[0,1].tick_params(axis='x', rotation=45)
-        axes[0,1].grid(True, alpha=0.3, axis='y')
-        
-        for bar in bars2:
-            height = bar.get_height()
-            axes[0,1].text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                          f'{height:.3f}', ha='center', va='bottom', fontweight='bold')
-        
-        # MAE comparison
-        mae_scores = perf_df['MAE']
-        bars3 = axes[1,0].bar(models, mae_scores, color=colors, alpha=0.8, edgecolor='black')
-        axes[1,0].set_title('Model Comparison by MAE\n(Lower is Better)', fontsize=14, fontweight='bold')
-        axes[1,0].set_ylabel('MAE', fontweight='bold')
-        axes[1,0].tick_params(axis='x', rotation=45)
-        axes[1,0].grid(True, alpha=0.3, axis='y')
-        
-        for bar in bars3:
-            height = bar.get_height()
-            axes[1,0].text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                          f'{height:.3f}', ha='center', va='bottom', fontweight='bold')
-        
-        # Training time comparison
-        time_scores = perf_df['Training Time']
-        bars4 = axes[1,1].bar(models, time_scores, color=colors, alpha=0.8, edgecolor='black')
-        axes[1,1].set_title('Model Training Time (seconds)\n(Lower is Better)', fontsize=14, fontweight='bold')
-        axes[1,1].set_ylabel('Training Time (s)', fontweight='bold')
-        axes[1,1].tick_params(axis='x', rotation=45)
-        axes[1,1].grid(True, alpha=0.3, axis='y')
-        
-        for bar in bars4:
-            height = bar.get_height()
-            axes[1,1].text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                          f'{height:.1f}', ha='center', va='bottom', fontweight='bold')
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-        
-        # Performance metrics explanation
-        with st.expander("📖 Understanding Performance Metrics"):
-            st.markdown("""
-            **R² Score (R-squared)**: Measures how well the model explains the variance in the data
-            - Range: 0 to 1 (higher is better)
-            - 0.8+ = Excellent, 0.6-0.8 = Good, <0.6 = Needs improvement
-            
-            **RMSE (Root Mean Square Error)**: Average magnitude of prediction errors
-            - Lower values indicate better accuracy
-            - In the same units as the target variable (grade points)
-            
-            **MAE (Mean Absolute Error)**: Average absolute difference between predictions and actual values
-            - More robust to outliers than RMSE
-            - Easier to interpret than RMSE
-            
-            **Training Time**: Computational resources required for model training
-            - Important for model selection in production environments
-            """)
-        
-        # Display performance table
-        st.subheader("Detailed Performance Metrics")
-        display_df = perf_df.copy()
-        display_df.columns = ['R² Score', 'RMSE', 'MAE', 'Training Time (s)']
-        st.dataframe(display_df.style.format({
-            'R² Score': '{:.3f}',
-            'RMSE': '{:.3f}', 
-            'MAE': '{:.3f}',
-            'Training Time (s)': '{:.1f}'
-        }).highlight_max(subset=['R² Score'], color='lightgreen')
-                    .highlight_min(subset=['RMSE', 'MAE', 'Training Time (s)'], color='lightcoral'),
-                    use_container_width=True)
+    # Dataset overview
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Students", len(df))
+    with col2:
+        st.metric("Number of Features", len(df.columns))
+    with col3:
+        st.metric("Average Grade", f"{df['avg_grade'].mean():.2f}")
+    with col4:
+        st.metric("Data Type", "Student Performance")
     
-    with tab2:
-        st.subheader("Residual Analysis")
-        
-        # Generate synthetic residuals for demonstration
-        np.random.seed(42)
-        y_true = np.random.normal(12, 3, 100)
-        y_pred = y_true + np.random.normal(0, 1.2, 100)
-        residuals = y_true - y_pred
-        
-        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
-        
-        # Residual distribution with median line
-        n, bins, patches = axes[0].hist(residuals, bins=15, alpha=0.7, color='skyblue', edgecolor='black')
-        median_residual = np.median(residuals)
-        axes[0].axvline(median_residual, color='red', linestyle='--', linewidth=2, 
-                       label=f'Median: {median_residual:.2f}')
-        axes[0].set_xlabel('Residuals')
-        axes[0].set_ylabel('Frequency')
-        axes[0].set_title('Distribution of Residuals\n(Vertical line shows median)', fontweight='bold')
-        axes[0].legend()
-        axes[0].grid(True, alpha=0.3)
-        
-        # Q-Q plot for normality check
-        stats.probplot(residuals, dist="norm", plot=axes[1])
-        axes[1].set_title('Q-Q Plot: Normality Check of Residuals', fontweight='bold')
-        axes[1].grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        st.pyplot(fig)
-        
-        # Residual statistics
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Mean Residual", f"{np.mean(residuals):.3f}")
-        with col2:
-            st.metric("Median Residual", f"{np.median(residuals):.3f}")
-        with col3:
-            st.metric("Std Deviation", f"{np.std(residuals):.3f}")
-        with col4:
-            st.metric("Normality (p-value)", f"{stats.normaltest(residuals).pvalue:.3f}")
+    # Filters and controls
+    st.subheader("Data Filters & Controls")
     
-    with tab3:
-        st.subheader("Prediction Accuracy Analysis")
-        
-        # Create prediction vs actual plot
-        fig, axes = plt.subplots(1, 2, figsize=(15, 6))
-        
-        # Scatter plot with perfect prediction line
-        axes[0].scatter(y_true, y_pred, alpha=0.6, color='blue')
-        axes[0].plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', lw=2)
-        axes[0].set_xlabel('Actual Grades')
-        axes[0].set_ylabel('Predicted Grades')
-        axes[0].set_title('Predicted vs Actual Grades\n(Dashed line = perfect prediction)', fontweight='bold')
-        axes[0].grid(True, alpha=0.3)
-        
-        # Error distribution by grade range
-        grade_ranges = ['0-5', '5-10', '10-15', '15-20']
-        error_means = [-0.8, -0.3, 0.1, 0.4]
-        error_stds = [0.9, 0.7, 0.5, 0.6]
-        
-        x_pos = np.arange(len(grade_ranges))
-        axes[1].bar(x_pos, error_means, yerr=error_stds, capsize=5, alpha=0.7, color='lightgreen', edgecolor='black')
-        axes[1].set_xlabel('Grade Range')
-        axes[1].set_ylabel('Mean Prediction Error')
-        axes[1].set_title('Prediction Error by Grade Range\n(Bars show mean ± std dev)', fontweight='bold')
-        axes[1].set_xticks(x_pos)
-        axes[1].set_xticklabels(grade_ranges)
-        axes[1].grid(True, alpha=0.3)
-        
-        # Add zero reference line
-        axes[1].axhline(y=0, color='red', linestyle='-', alpha=0.3)
-        
-        plt.tight_layout()
-        st.pyplot(fig)
+    col1, col2, col3 = st.columns(3)
     
-    with tab4:
-        st.subheader("Feature Importance Analysis")
+    with col1:
+        # Select columns to display
+        all_columns = list(df.columns)
+        default_columns = ['Dalc', 'Walc', 'studytime', 'absences', 'failures', 'avg_grade']
+        selected_columns = st.multiselect(
+            "Select columns to display:",
+            options=all_columns,
+            default=default_columns
+        )
+    
+    with col2:
+        # Filter by grade range
+        min_grade, max_grade = st.slider(
+            "Filter by average grade:",
+            min_value=float(df['avg_grade'].min()),
+            max_value=float(df['avg_grade'].max()),
+            value=(float(df['avg_grade'].min()), float(df['avg_grade'].max())),
+            step=0.5
+        )
+    
+    with col3:
+        # Number of rows to display
+        rows_to_display = st.selectbox(
+            "Rows to display:",
+            options=[50, 100, 200, 500, "All"],
+            index=0
+        )
+    
+    # Apply filters
+    filtered_df = df[df['avg_grade'].between(min_grade, max_grade)]
+    
+    if selected_columns:
+        filtered_df = filtered_df[selected_columns]
+    
+    if rows_to_display != "All":
+        filtered_df = filtered_df.head(rows_to_display)
+    
+    # Display the data table
+    st.subheader("Student Performance Data")
+    
+    # Use st.dataframe for interactive table
+    st.dataframe(
+        filtered_df,
+        use_container_width=True,
+        height=600,
+        hide_index=False
+    )
+    
+    # Download option
+    csv = filtered_df.to_csv(index=False)
+    st.download_button(
+        label="📥 Download filtered data as CSV",
+        data=csv,
+        file_name="filtered_student_data.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    
+    # Dataset statistics
+    st.subheader("Dataset Statistics")
+    
+    # Select numerical columns for statistics
+    numerical_cols = filtered_df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    if numerical_cols:
+        stats_tab1, stats_tab2, stats_tab3 = st.tabs(["📊 Summary Statistics", "📈 Distribution", "🔍 Missing Values"])
         
-        if hasattr(st.session_state.predictor.best_model, 'feature_importances_'):
-            # Get feature importances
-            importances = st.session_state.predictor.best_model.feature_importances_
-            feature_names = st.session_state.predictor.selected_features
+        with stats_tab1:
+            st.dataframe(
+                filtered_df[numerical_cols].describe(),
+                use_container_width=True
+            )
+        
+        with stats_tab2:
+            # Quick distribution visualization
+            col1, col2 = st.columns(2)
             
-            # Create feature importance dataframe
-            importance_df = pd.DataFrame({
-                'Feature': feature_names,
-                'Importance': importances
-            }).sort_values('Importance', ascending=True)  # Sort for horizontal bar plot
+            with col1:
+                selected_feature = st.selectbox(
+                    "Select feature for distribution:",
+                    options=numerical_cols,
+                    index=0 if 'avg_grade' in numerical_cols else 0
+                )
             
-            # Plot feature importance
-            fig, ax = plt.subplots(figsize=(12, 10))
-            top_features = importance_df.tail(15)  # Get top 15 features
+            if selected_feature:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.hist(filtered_df[selected_feature], bins=20, alpha=0.7, color='skyblue', edgecolor='black')
+                ax.axvline(filtered_df[selected_feature].mean(), color='red', linestyle='--', 
+                          label=f'Mean: {filtered_df[selected_feature].mean():.2f}')
+                ax.axvline(filtered_df[selected_feature].median(), color='green', linestyle='--', 
+                          label=f'Median: {filtered_df[selected_feature].median():.2f}')
+                ax.set_xlabel(selected_feature)
+                ax.set_ylabel('Frequency')
+                ax.set_title(f'Distribution of {selected_feature}')
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                st.pyplot(fig)
+        
+        with stats_tab3:
+            # Missing values analysis
+            missing_data = filtered_df.isnull().sum()
+            missing_percent = (missing_data / len(filtered_df)) * 100
             
-            # Create horizontal bar plot
-            y_pos = np.arange(len(top_features))
-            bars = ax.barh(y_pos, top_features['Importance'], color='steelblue', alpha=0.8, edgecolor='black')
+            missing_df = pd.DataFrame({
+                'Column': missing_data.index,
+                'Missing Values': missing_data.values,
+                'Percentage': missing_percent.values
+            })
             
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(top_features['Feature'])
-            ax.set_xlabel('Feature Importance Score', fontweight='bold')
-            ax.set_title('Top 15 Most Important Features (Random Forest Model)', fontsize=14, fontweight='bold')
+            missing_df = missing_df[missing_df['Missing Values'] > 0]
             
-            # Add value labels on bars
-            for i, bar in enumerate(bars):
-                width = bar.get_width()
-                ax.text(width + 0.001, bar.get_y() + bar.get_height()/2., 
-                       f'{width:.3f}', ha='left', va='center', fontweight='bold')
-            
-            ax.grid(True, alpha=0.3, axis='x')
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Feature importance explanation
-            with st.expander("🔍 Understanding Feature Importance"):
-                st.markdown("""
-                **Feature Importance** shows which variables most influence the model's predictions:
-                - **High importance**: Strong impact on grade predictions
-                - **Low importance**: Minimal impact on predictions
-                
-                **Key Insights**:
-                - Focus intervention efforts on high-importance factors
-                - Low-importance features may be candidates for removal in simplified models
-                - Helps understand what drives student performance
-                """)
-            
-        else:
-            st.info("Feature importance is only available for tree-based models like Random Forest.")
+            if len(missing_df) > 0:
+                st.write("Columns with missing values:")
+                st.dataframe(missing_df, use_container_width=True)
+            else:
+                st.success("✅ No missing values in the filtered dataset!")
+    
+    # Data quality assessment
+    st.subheader("Data Quality Assessment")
+    
+    quality_col1, quality_col2, quality_col3 = st.columns(3)
+    
+    with quality_col1:
+        completeness = (1 - df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
+        st.metric("Data Completeness", f"{completeness:.1f}%")
+    
+    with quality_col2:
+        duplicate_rows = df.duplicated().sum()
+        st.metric("Duplicate Rows", duplicate_rows)
+    
+    with quality_col3:
+        numeric_columns = len(df.select_dtypes(include=[np.number]).columns)
+        st.metric("Numeric Features", numeric_columns)
+
+# Update the main function to include the new data table option
+def main():
+    if 'predictor' not in st.session_state:
+        st.session_state.predictor = StudentPerformancePredictor()
+        st.session_state.predictor.load_and_preprocess_data()
+        st.session_state.model_trained = False
+    
+    st.markdown('<div class="main-header">🎓 Student Performance Predictor</div>', unsafe_allow_html=True)
+    
+    st.sidebar.title("Navigation")
+    app_mode = st.sidebar.selectbox("Choose Mode", 
+                                   ["🏠 Home", 
+                                    "📊 Student Input", 
+                                    "📈 Data Analysis", 
+                                    "📋 Data Table",  # New option added here
+                                    "🤖 AI Recommendations", 
+                                    "ℹ️ About"])
+    
+    if app_mode == "🏠 Home":
+        show_home_page()
+    elif app_mode == "📊 Student Input":
+        show_student_input()
+    elif app_mode == "📈 Data Analysis":
+        show_data_analysis()
+    elif app_mode == "📋 Data Table":  # New data table page
+        show_data_table()
+    elif app_mode == "🤖 AI Recommendations":
+        show_ai_recommendations()
+    elif app_mode == "ℹ️ About":
+        show_about_page()
 
 def show_about_page():
     st.header("ℹ️ About This Application")
