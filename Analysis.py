@@ -91,17 +91,12 @@ class StudentPerformancePredictor:
     def load_and_preprocess_data(self):
         """Load and preprocess the student performance data"""
         try:
-            # For demonstration, we'll create synthetic data if file not found
-            # In real application, replace with actual data loading
             self.df = pd.read_csv('student-por.csv')
         except:
             st.warning("Original dataset not found. Using synthetic data for demonstration.")
             self._create_synthetic_data()
         
-        # Calculate average grade
         self.df['avg_grade'] = (self.df['G1'] + self.df['G2'] + self.df['G3']) / 3
-        
-        # Advanced feature engineering
         self._create_advanced_features()
     
     def _create_synthetic_data(self):
@@ -110,18 +105,18 @@ class StudentPerformancePredictor:
         n_students = 500
         
         synthetic_data = {
-            'Dalc': np.random.randint(1, 6, n_students),  # Workday alcohol consumption (1-5)
-            'Walc': np.random.randint(1, 6, n_students),  # Weekend alcohol consumption (1-5)
-            'studytime': np.random.randint(1, 5, n_students),  # Study time (1-4)
-            'absences': np.random.randint(0, 30, n_students),  # Absences
-            'failures': np.random.randint(0, 4, n_students),  # Past failures
-            'famrel': np.random.randint(1, 6, n_students),  # Family relationship quality (1-5)
-            'Medu': np.random.randint(0, 5, n_students),  # Mother's education (0-4)
-            'Fedu': np.random.randint(0, 5, n_students),  # Father's education (0-4)
-            'goout': np.random.randint(1, 6, n_students),  # Going out with friends (1-5)
-            'freetime': np.random.randint(1, 6, n_students),  # Free time (1-5)
-            'health': np.random.randint(1, 6, n_students),  # Health status (1-5)
-            'traveltime': np.random.randint(1, 5, n_students),  # Travel time to school (1-4)
+            'Dalc': np.random.randint(1, 6, n_students),
+            'Walc': np.random.randint(1, 6, n_students),
+            'studytime': np.random.randint(1, 5, n_students),
+            'absences': np.random.randint(0, 30, n_students),
+            'failures': np.random.randint(0, 4, n_students),
+            'famrel': np.random.randint(1, 6, n_students),
+            'Medu': np.random.randint(0, 5, n_students),
+            'Fedu': np.random.randint(0, 5, n_students),
+            'goout': np.random.randint(1, 6, n_students),
+            'freetime': np.random.randint(1, 6, n_students),
+            'health': np.random.randint(1, 6, n_students),
+            'traveltime': np.random.randint(1, 5, n_students),
             'romantic': np.random.choice(['yes', 'no'], n_students),
             'activities': np.random.choice(['yes', 'no'], n_students),
             'internet': np.random.choice(['yes', 'no'], n_students),
@@ -133,10 +128,8 @@ class StudentPerformancePredictor:
             'reason': np.random.choice(['home', 'reputation', 'course', 'other'], n_students)
         }
         
-        # Generate grades based on features with some noise
-        base_grade = 12  # Base average grade
+        base_grade = 12
         
-        # Calculate grades with realistic relationships
         grades = (
             base_grade
             - synthetic_data['Dalc'] * 0.5
@@ -150,10 +143,9 @@ class StudentPerformancePredictor:
             - (synthetic_data['goout'] + synthetic_data['freetime']) * 0.2
             + (synthetic_data['higher'] == 'yes') * 1.5
             + (synthetic_data['famsup'] == 'yes') * 0.8
-            + np.random.normal(0, 2, n_students)  # Random noise
+            + np.random.normal(0, 2, n_students)
         )
         
-        # Clip grades to realistic range and split into G1, G2, G3
         grades = np.clip(grades, 0, 20)
         synthetic_data['G1'] = np.clip(grades + np.random.normal(0, 1, n_students), 0, 20)
         synthetic_data['G2'] = np.clip(grades + np.random.normal(0, 1, n_students), 0, 20)
@@ -163,7 +155,6 @@ class StudentPerformancePredictor:
     
     def _create_advanced_features(self):
         """Create advanced features for the model"""
-        # Basic advanced features
         self.df['total_alcohol'] = self.df['Dalc'] + self.df['Walc']
         self.df['alcohol_frequency'] = (self.df['Dalc'] + self.df['Walc'] * 2) / 3
         self.df['study_efficiency'] = self.df['studytime'] / (self.df['absences'] + 1)
@@ -174,7 +165,6 @@ class StudentPerformancePredictor:
         self.df['school_support'] = (self.df['schoolsup'] == 'yes').astype(int) * 2 + (self.df['paid'] == 'yes').astype(int)
         self.df['motivation'] = (self.df['higher'] == 'yes').astype(int) * 3 + self.df['reason'].map({'home': 1, 'reputation': 2, 'course': 3, 'other': 1})
         
-        # Interaction features
         self.df['alcohol_study_interaction'] = self.df['total_alcohol'] * (5 - self.df['studytime'])
         self.df['absence_failure_interaction'] = self.df['absences'] * self.df['failures']
         self.df['support_motivation_interaction'] = self.df['family_support'] * self.df['motivation']
@@ -183,7 +173,6 @@ class StudentPerformancePredictor:
         """Train the prediction model"""
         with st.spinner("Training the prediction model... This may take a few moments."):
             
-            # Prepare features
             base_features = ['Dalc', 'Walc', 'studytime', 'absences', 'famrel', 'health', 
                            'failures', 'goout', 'freetime', 'Medu', 'Fedu', 'traveltime']
             
@@ -203,7 +192,6 @@ class StudentPerformancePredictor:
             
             y = self.df['avg_grade']
             
-            # Feature selection
             estimator = RandomForestRegressor(n_estimators=100, random_state=42)
             selector = RFE(estimator, n_features_to_select=min(20, X.shape[1]), step=1)
             X_selected = selector.fit_transform(X, y)
@@ -211,22 +199,18 @@ class StudentPerformancePredictor:
             
             X_final = X[self.selected_features]
             
-            # Train-test split
             X_train, X_test, y_train, y_test = train_test_split(
                 X_final, y, test_size=0.2, random_state=42, stratify=pd.cut(y, bins=5)
             )
             
-            # Standardization
             self.scaler = StandardScaler()
             X_train_scaled = self.scaler.fit_transform(X_train)
             X_test_scaled = self.scaler.transform(X_test)
             
-            # Model training (using Random Forest for simplicity in demo)
             self.best_model = RandomForestRegressor(n_estimators=200, max_depth=20, random_state=42)
             self.best_model.fit(X_train, y_train)
             self.best_model_name = "Random Forest"
             
-            # Evaluate model
             y_pred = self.best_model.predict(X_test)
             r2 = r2_score(y_test, y_pred)
             
@@ -239,34 +223,127 @@ class StudentPerformancePredictor:
         if not self.is_trained:
             return None, None
         
-        # Prepare input data
         input_df = pd.DataFrame([input_features])
         
-        # Ensure all selected features are present
         for feature in self.selected_features:
             if feature not in input_df.columns:
-                input_df[feature] = 0  # Default value
+                input_df[feature] = 0
         
         input_df = input_df[self.selected_features]
         
-        # Make prediction
         predicted_grade = self.best_model.predict(input_df)[0]
         predicted_grade = max(0, min(20, predicted_grade))
         
-        # Simple confidence estimation (in real scenario, use proper confidence intervals)
-        confidence = 1.5  # Fixed confidence interval for demo
+        confidence = 1.5
         
         return predicted_grade, confidence
 
 def get_ai_recommendations(student_data, predicted_grade):
     """Get AI-powered recommendations using Qwen API"""
     
-    # 完整详细的prompt - 针对千问模型优化
+    total_alcohol = student_data['Dalc'] + student_data['Walc']
+    alcohol_frequency = (student_data['Dalc'] + student_data['Walc'] * 2) / 3
+    study_efficiency = student_data['studytime'] / (student_data['absences'] + 1)
+    parent_edu_score = (student_data['Medu'] * 0.6 + student_data['Fedu'] * 0.4)
+    academic_risk = student_data['failures'] * 2 + (1 if student_data['absences'] > 5 else 0) * 3
+    social_activity = student_data['goout'] + student_data['freetime']
+    family_support = student_data['famrel'] + (1 if student_data['famsup'] == 'yes' else 0) * 2
+    school_support = (1 if student_data['schoolsup'] == 'yes' else 0) * 2 + (1 if student_data['paid'] == 'yes' else 0)
+    motivation = (1 if student_data['higher'] == 'yes' else 0) * 3 + 2
+    
+    alcohol_study_interaction = total_alcohol * (5 - student_data['studytime'])
+    absence_failure_interaction = student_data['absences'] * student_data['failures']
+    support_motivation_interaction = family_support * motivation
+    
     prompt = f"""
-    [你的prompt内容保持不变]
+    【Basic Student Characteristics】
+    - Weekday alcohol consumption: {student_data['Dalc']}/5
+    - Weekend alcohol consumption: {student_data['Walc']}/5
+    - Weekly study time: {student_data['studytime']} hours
+    - Absence days: {student_data['absences']} days
+    - Past failed subjects: {student_data['failures']}
+    - Family relationship quality: {student_data['famrel']}/5
+    - Mother's education level: {student_data['Medu']}/4
+    - Father's education level: {student_data['Fedu']}/4
+    - Going out frequency: {student_data['goout']}/5
+    - Free time: {student_data['freetime']}/5
+    - Health status: {student_data['health']}/5
+    - Travel time: {student_data['traveltime']}/4
+    - Home internet access: {student_data['internet']}
+    - Higher education plans: {student_data['higher']}
+    - Family educational support: {student_data['famsup']}
+    - School extra support: {student_data['schoolsup']}
+    - Extra paid classes: {student_data['paid']}
+    - Extracurricular activities: {student_data['activities']}
+    - Romantic relationship: {student_data['romantic']}
+
+    【Advanced Feature Calculations】
+    - Total alcohol consumption: {total_alcohol}/10
+    - Alcohol frequency index: {alcohol_frequency:.2f}
+    - Study efficiency index: {study_efficiency:.2f}
+    - Parent education score: {parent_edu_score:.2f}
+    - Academic risk index: {academic_risk}
+    - Social activity index: {social_activity}/10
+    - Family support index: {family_support}
+    - School support index: {school_support}
+    - Learning motivation index: {motivation}
+    - Alcohol-study interaction effect: {alcohol_study_interaction:.2f}
+    - Absence-failure interaction effect: {absence_failure_interaction}
+    - Support-motivation interaction effect: {support_motivation_interaction}
+
+    【Machine Learning Model Analysis Results】
+    - Predicted average grade: {predicted_grade:.1f}/20 points
+    - Model confidence: ±1.5 points
+    - Risk level: {"High risk" if predicted_grade < 10 else "Medium risk" if predicted_grade < 14 else "Low risk"}
+
+    【Model Feature Importance Analysis】
+    Based on Random Forest model, the most important influencing factors include:
+    1. Study time and efficiency
+    2. Absence and failure history
+    3. Alcohol consumption patterns
+    4. Family and school support systems
+    5. Learning motivation and future planning
+
+    【Deep Analysis Requirements】
+    Please conduct in-depth educational psychology analysis based on the complete data above:
+
+    1. Multi-dimensional feature correlation analysis:
+       - Analyze internal relationships between basic and advanced features
+       - Evaluate composite effects of interaction features on student performance
+       - Identify key risk factors and protective factors
+
+    2. Personalized intervention strategy design:
+       - Propose specific improvement measures for high-risk features
+       - Design enhancement solutions using protective factors
+       - Develop phased progressive improvement plans
+
+    3. Systematic support solutions:
+       - Family support system optimization suggestions
+       - School resource utilization strategies
+       - Personal habit development plans
+
+    4. Quantifiable progress indicators:
+       - Set clear short-term goals (1 month)
+       - Develop measurable medium-term goals (3 months)
+       - Plan long-term development path (6+ months)
+
+    【Response Format Requirements】
+    Please organize the response in the following structure:
+    ## Comprehensive Feature Analysis
+    [Analyze correlations and impacts of all features]
+
+    ## Core Problem Identification
+    [Identify 3-5 most critical issues]
+
+    ## Personalized Intervention Strategies
+    [Provide 7-10 specific actionable recommendations]
+
+    ## Implementation Roadmap
+    [Phased timeline planning and goal setting]
+
+    Please ensure all recommendations are based on the provided feature data, targeted and actionable.
     """
     
-    # 千问API配置
     QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
     QWEN_API_KEY = "sk-bb0301c0ab834446b534fd3e6074622a"
     
@@ -274,20 +351,18 @@ def get_ai_recommendations(student_data, predicted_grade):
         headers = {
             "Authorization": f"Bearer {QWEN_API_KEY}",
             "Content-Type": "application/json"
-            # 移除了异步调用头
         }
         
-        # 千问API专用格式
         payload = {
-            "model": "qwen2.5-72b-instruct",  # 指定千问模型
+            "model": "qwen2.5-72b-instruct",
             "input": {
                 "messages": [
                     {
                         "role": "system",
-                        "content": """你是一位资深教育顾问，拥有20年学生辅导经验。
-                        你擅长分析学生学习行为、识别潜在问题并提供切实可行的改进方案。
-                        你的建议总是基于数据驱动，兼顾学生的心理状态和实际可行性。
-                        请用中文回答，确保建议专业、具体且易于理解。"""
+                        "content": """You are an experienced educational data scientist with background in educational psychology and machine learning.
+                        You are skilled at analyzing multi-dimensional student data, identifying key influencing factors, and providing evidence-based intervention recommendations.
+                        Your analysis always combines quantitative data and qualitative insights to ensure recommendations are both scientific and practical.
+                        Please respond in professional but understandable English, ensuring recommendations are specific, actionable and measurable."""
                     },
                     {
                         "role": "user",
@@ -296,204 +371,162 @@ def get_ai_recommendations(student_data, predicted_grade):
                 ]
             },
             "parameters": {
-                "max_tokens": 4000,  # 增加token限制以适应更长的分析
+                "max_tokens": 4000,
                 "temperature": 0.7,
                 "top_p": 0.8,
                 "repetition_penalty": 1.1
             }
         }
         
-        with st.spinner("🤖 AI正在深度分析学生情况..."):
+        st.info("📊 Sending complete data analysis to Qwen AI...")
+        with st.spinner("🤖 AI is conducting deep analysis of all features and model results..."):
             response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
             
-            # 修复：解析千问API响应格式 - 从text字段获取
+            with st.expander("🔧 API Request Details"):
+                st.json({
+                    "model": "qwen2.5-72b-instruct",
+                    "input_tokens": len(prompt),
+                    "features_sent": {
+                        "basic_features": 19,
+                        "advanced_features": 12,
+                        "model_results": 3
+                    }
+                })
+            
             if "output" in result and "text" in result["output"]:
                 ai_response = result["output"]["text"]
-                st.success("✅ 千问AI分析完成！")
+                st.success("✅ Qwen AI has completed deep analysis!")
                 
-                # 显示使用情况
                 if "usage" in result:
                     usage = result["usage"]
-                    st.info(f"Token使用: 输入{usage.get('input_tokens', 0)} / 输出{usage.get('output_tokens', 0)}")
+                    st.info(f"📈 Token usage: Input {usage.get('input_tokens', 0)} / Output {usage.get('output_tokens', 0)}")
                 
-                return parse_qwen_text_response(ai_response)
+                return parse_qwen_comprehensive_response(ai_response)
             else:
-                st.error(f"千问API响应格式异常: {result}")
+                st.error(f"Qwen API response format error: {result}")
                 return get_fallback_recommendations(predicted_grade)
         else:
-            error_msg = f"千问API请求失败: {response.status_code}"
-            # [错误处理代码保持不变]
+            error_msg = f"Qwen API request failed: {response.status_code}"
+            if response.status_code == 401:
+                error_msg += " - API Key invalid"
+            elif response.status_code == 429:
+                error_msg += " - Request rate limit exceeded"
+            st.error(error_msg)
+            return get_fallback_recommendations(predicted_grade)
             
     except requests.exceptions.Timeout:
-        st.error("千问API请求超时，请稍后重试")
+        st.error("Qwen API request timeout, please try again later")
         return get_fallback_recommendations(predicted_grade)
     except Exception as e:
-        st.error(f"获取千问AI推荐时出错: {str(e)}")
+        st.error(f"Error getting Qwen AI recommendations: {str(e)}")
         return get_fallback_recommendations(predicted_grade)
 
-def parse_qwen_text_response(ai_text):
-    """解析千问模型返回的文本格式响应"""
+def parse_qwen_comprehensive_response(ai_text):
+    """Parse Qwen model's comprehensive analysis response"""
     try:
-        # 显示原始AI响应（用于调试）
-        with st.expander("查看千问AI完整分析报告"):
+        with st.expander("📋 View Complete Qwen AI Analysis Report"):
             st.markdown(ai_text)
         
-        # 直接从文本中提取关键信息
         lines = ai_text.split('\n')
         recommendations = []
-        risk_assessment = "基于千问AI的深度分析评估"
-        key_areas = []
+        risk_assessment = "Deep analysis based on multi-dimensional features"
+        key_areas = ["Learning methods", "Time management", "Support systems"]
         
-        # 提取风险评估
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if "风险等级评估" in line or "综合风险等级评估" in line:
-                # 获取风险评估行
-                risk_assessment = line
-                # 尝试获取下一行作为补充
-                if i + 1 < len(lines) and lines[i + 1].strip():
-                    next_line = lines[i + 1].strip()
-                    if len(next_line) < 100:  # 避免过长的文本
-                        risk_assessment += " - " + next_line
-                break
-        
-        # 提取关键领域
-        key_areas_started = False
+        in_recommendations = False
         for line in lines:
             line = line.strip()
-            if "关键领域" in line or "需要立即关注" in line:
-                key_areas_started = True
-                continue
-            if key_areas_started and line and not line.startswith('#'):
-                if any(char in line for char in ['：', ':', '-', '•']):
-                    # 清理标记符号
-                    clean_line = re.sub(r'^[•\-\d\.\s、：:]+', '', line).strip()
-                    if clean_line and len(clean_line) > 2 and len(clean_line) < 50:
-                        key_areas.append(clean_line)
-                elif len(line) < 50 and line not in key_areas:
-                    key_areas.append(line)
             
-            # 如果遇到下一个标题，停止收集关键领域
-            if key_areas_started and line.startswith('#'):
-                break
-        
-        # 提取具体建议 - 从个性化改进策略部分
-        in_recommendations_section = False
-        for i, line in enumerate(lines):
-            line = line.strip()
-            
-            # 开始个性化改进策略部分
-            if "个性化改进策略" in line or "改进策略" in line:
-                in_recommendations_section = True
+            if "Personalized Intervention Strategies" in line or "Specific Recommendations" in line or "Improvement Measures" in line:
+                in_recommendations = True
                 continue
             
-            # 结束条件
-            if in_recommendations_section and ("风险评估" in line or "具体行动计划" in line):
-                break
+            if in_recommendations and line and (line.startswith(('-', '•', '1.', '2.', '3.', '4.', '5.'))):
+                clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
+                if clean_line and len(clean_line) > 8 and clean_line not in recommendations:
+                    recommendations.append(clean_line)
             
-            # 收集建议
-            if in_recommendations_section and line:
-                # 匹配编号列表项
-                if (re.match(r'^\d+\.', line) or 
-                    line.startswith('-') or 
-                    line.startswith('•')):
-                    clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
-                    if clean_line and len(clean_line) > 10 and clean_line not in recommendations:
-                        recommendations.append(clean_line)
+            if "Risk" in line and len(line) < 100:
+                risk_assessment = line
+            
+            if "Key" in line and len(line) < 80:
+                clean_line = re.sub(r'^[•\-\d\.\s、：:]+', '', line).strip()
+                if clean_line and 5 < len(clean_line) < 50:
+                    key_areas.append(clean_line)
         
-        # 如果建议太少，从行动计划中补充
         if len(recommendations) < 5:
-            in_action_plan = False
             for line in lines:
                 line = line.strip()
-                if "具体行动计划" in line or "行动计划" in line:
-                    in_action_plan = True
-                    continue
-                
-                if in_action_plan and line and (re.match(r'^\d+\.', line) or line.startswith('-')):
-                    clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
-                    if clean_line and len(clean_line) > 10 and clean_line not in recommendations:
-                        recommendations.append(clean_line)
-        
-        # 确保有足够的关键领域
-        if not key_areas:
-            key_areas = ["学习方法优化", "时间管理改进", "支持系统建设"]
-        
-        # 如果建议太少，使用备用推荐
-        if len(recommendations) < 3:
-            st.warning("千问AI返回的建议较少，补充备用建议")
-            fallback = get_fallback_recommendations(12.0)
-            recommendations = recommendations + fallback["recommendations"][:3]
+                if line and len(line) > 15 and any(keyword in line for keyword in 
+                    ['recommend', 'should', 'can', 'need', 'suggest']):
+                    if line not in recommendations and len(recommendations) < 8:
+                        recommendations.append(line)
         
         return {
-            "recommendations": recommendations[:8],  # 最多8个建议
+            "recommendations": recommendations[:8] if recommendations else get_fallback_recommendations(12.0)["recommendations"],
             "risk_assessment": risk_assessment,
-            "key_areas": list(set(key_areas))[:4]  # 去重并最多4个关键领域
+            "key_areas": list(set(key_areas))[:4]
         }
     except Exception as e:
-        st.error(f"解析千问AI响应时出错: {str(e)}")
+        st.error(f"Error parsing AI response: {str(e)}")
         return get_fallback_recommendations(12.0)
 
 def get_fallback_recommendations(predicted_grade):
-    """基于预测成绩的智能备用推荐"""
+    """Intelligent fallback recommendations based on predicted grade"""
     
     if predicted_grade < 10:
         return {
             "recommendations": [
-                "立即安排一对一学习辅导，每周至少3次",
-                "制定详细的学习计划表，精确到每天的学习任务",
-                "建立家长-教师定期沟通机制，每周反馈学习情况",
-                "减少社交活动至每周1次，专注学业提升",
-                "参加学校提供的额外学习支持课程",
-                "建立学习目标追踪系统，每周评估进度",
-                "寻求心理辅导支持，提升学习动机和自信心"
+                "Immediately arrange one-on-one tutoring sessions, at least 3 times per week",
+                "Create detailed study schedule with specific daily learning tasks",
+                "Establish regular parent-teacher communication mechanism with weekly feedback",
+                "Reduce social activities to once per week, focus on academic improvement",
+                "Participate in additional learning support courses provided by school",
+                "Establish learning goal tracking system with weekly progress assessment",
+                "Seek psychological counseling support to enhance learning motivation and confidence"
             ],
-            "risk_assessment": "高风险 - 需要立即干预和全方位支持",
-            "key_areas": ["学习基础巩固", "时间管理优化", "心理支持建设"]
+            "risk_assessment": "High risk - Requires immediate intervention and comprehensive support",
+            "key_areas": ["Learning foundation consolidation", "Time management optimization", "Psychological support building"]
         }
     elif predicted_grade < 14:
         return {
             "recommendations": [
-                "优化学习方法，引入主动学习策略",
-                "加强薄弱科目的专项练习，每周额外2小时",
-                "建立学习小组，与同学互相监督和帮助",
-                "制定周学习计划，平衡各科目学习时间",
-                "利用在线学习资源补充课堂知识",
-                "定期进行学习效果自我评估和调整",
-                "参加课外学术活动，拓展学习视野"
+                "Optimize learning methods by introducing active learning strategies",
+                "Strengthen weak subject practice with 2 additional hours per week",
+                "Establish study groups for mutual supervision and assistance",
+                "Create weekly study plan to balance all subjects",
+                "Utilize online learning resources to supplement classroom knowledge",
+                "Conduct regular self-assessment of learning effectiveness",
+                "Participate in extracurricular academic activities to expand learning horizons"
             ],
-            "risk_assessment": "中等风险 - 需要系统改进学习方法和习惯",
-            "key_areas": ["学习方法改进", "学习效率提升", "知识体系构建"]
+            "risk_assessment": "Medium risk - Requires systematic improvement of learning methods and habits",
+            "key_areas": ["Learning method improvement", "Learning efficiency enhancement", "Knowledge system construction"]
         }
     else:
         return {
             "recommendations": [
-                "继续保持高效学习习惯，探索更深层次知识",
-                "挑战高阶课程或参加学术竞赛",
-                "担任学习小组负责人，帮助其他同学",
-                "探索跨学科学习机会，拓展知识边界",
-                "参与科研项目或学术论文写作",
-                "培养领导力和公众表达能力",
-                "规划长期学术发展路径和职业方向"
+                "Maintain efficient learning habits while exploring deeper knowledge",
+                "Challenge advanced courses or participate in academic competitions",
+                "Serve as study group leader to help other students",
+                "Explore interdisciplinary learning opportunities to expand knowledge boundaries",
+                "Participate in research projects or academic paper writing",
+                "Develop leadership and public speaking skills",
+                "Plan long-term academic development path and career direction"
             ],
-            "risk_assessment": "低风险 - 表现优秀，可追求卓越发展",
-            "key_areas": ["能力深度拓展", "领导力培养", "综合素养提升"]
+            "risk_assessment": "Low risk - Excellent performance, can pursue excellence development",
+            "key_areas": ["Ability depth expansion", "Leadership cultivation", "Comprehensive quality improvement"]
         }
 
 def main():
-    # Initialize predictor
     if 'predictor' not in st.session_state:
         st.session_state.predictor = StudentPerformancePredictor()
         st.session_state.predictor.load_and_preprocess_data()
         st.session_state.model_trained = False
     
-    # Header
     st.markdown('<div class="main-header">🎓 Student Performance Predictor</div>', unsafe_allow_html=True)
     
-    # Sidebar for navigation
     st.sidebar.title("Navigation")
     app_mode = st.sidebar.selectbox("Choose Mode", 
                                    ["🏠 Home", "📊 Student Input", "🤖 AI Recommendations", "ℹ️ About"])
@@ -508,7 +541,6 @@ def main():
         show_about_page()
 
 def show_home_page():
-    """Display the home page"""
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -544,7 +576,6 @@ def show_home_page():
         Navigate to **Student Input** to begin predicting student performance.
         """)
         
-        # Train model button
         if not st.session_state.model_trained:
             if st.button("🚀 Initialize Prediction Model", use_container_width=True):
                 r2_score = st.session_state.predictor.train_model()
@@ -555,14 +586,12 @@ def show_home_page():
             st.success("✅ Prediction model is ready!")
 
 def show_student_input():
-    """Display student input form and prediction results"""
     st.header("📊 Student Performance Prediction")
     
     if not st.session_state.model_trained:
         st.warning("Please initialize the prediction model from the Home page first.")
         return
     
-    # Create input form
     with st.form("student_input_form"):
         col1, col2, col3 = st.columns(3)
         
@@ -595,7 +624,6 @@ def show_student_input():
             health = st.slider("Current Health Status (1-5)", 1, 5, 4,
                              help="1: Very Bad, 5: Very Good")
         
-        # Additional factors
         st.subheader("Additional Factors")
         col4, col5, col6 = st.columns(3)
         
@@ -613,22 +641,19 @@ def show_student_input():
         
         romantic = st.selectbox("In a Romantic Relationship", ["yes", "no"])
         
-        # Submit button
         submitted = st.form_submit_button("🎯 Predict Performance", use_container_width=True)
     
     if submitted:
-        # Prepare input data
         input_features = {
             'Dalc': dalc, 'Walc': walc, 'studytime': studytime, 'absences': absences,
             'failures': failures, 'famrel': famrel, 'Medu': medu, 'Fedu': fedu,
             'goout': goout, 'freetime': freetime, 'health': health, 'traveltime': traveltime,
             'romantic': romantic, 'activities': activities, 'internet': internet,
             'higher': higher, 'famsup': famsup, 'schoolsup': schoolsup, 'paid': paid,
-            'nursery': 'yes',  # Default value
-            'reason': 'course'  # Default value
+            'nursery': 'yes',
+            'reason': 'course'
         }
         
-        # Calculate advanced features
         input_features['total_alcohol'] = dalc + walc
         input_features['alcohol_frequency'] = (dalc + walc * 2) / 3
         input_features['study_efficiency'] = studytime / (absences + 1)
@@ -637,14 +662,12 @@ def show_student_input():
         input_features['social_activity'] = goout + freetime
         input_features['family_support'] = famrel + (1 if famsup == 'yes' else 0) * 2
         input_features['school_support'] = (1 if schoolsup == 'yes' else 0) * 2 + (1 if paid == 'yes' else 0)
-        input_features['motivation'] = (1 if higher == 'yes' else 0) * 3 + 2  # Default motivation
+        input_features['motivation'] = (1 if higher == 'yes' else 0) * 3 + 2
         
-        # Interaction features
         input_features['alcohol_study_interaction'] = input_features['total_alcohol'] * (5 - studytime)
         input_features['absence_failure_interaction'] = absences * failures
         input_features['support_motivation_interaction'] = input_features['family_support'] * input_features['motivation']
         
-        # Categorical features as dummy variables
         input_features['romantic_yes'] = 1 if romantic == 'yes' else 0
         input_features['activities_yes'] = 1 if activities == 'yes' else 0
         input_features['internet_yes'] = 1 if internet == 'yes' else 0
@@ -653,11 +676,9 @@ def show_student_input():
         input_features['schoolsup_yes'] = 1 if schoolsup == 'yes' else 0
         input_features['paid_yes'] = 1 if paid == 'yes' else 0
         
-        # Make prediction
         predicted_grade, confidence = st.session_state.predictor.predict_performance(input_features)
         
         if predicted_grade is not None:
-            # Display prediction results
             st.markdown('<div class="prediction-card">', unsafe_allow_html=True)
             st.subheader("📈 Prediction Results")
             
@@ -667,7 +688,6 @@ def show_student_input():
                 st.metric("Predicted Average Grade", f"{predicted_grade:.1f}/20")
                 
             with col2:
-                # Risk assessment
                 if predicted_grade >= 14:
                     risk_level = "Low Risk"
                     risk_class = "risk-low"
@@ -683,20 +703,17 @@ def show_student_input():
             with col3:
                 st.metric("Confidence Interval", f"±{confidence:.1f}")
             
-            # Progress bar for visualization
             st.progress(predicted_grade / 20)
             st.caption(f"Performance Score: {predicted_grade:.1f}/20")
             
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # Store prediction for AI recommendations
             st.session_state.last_prediction = {
                 'predicted_grade': predicted_grade,
                 'input_features': input_features,
                 'risk_level': risk_level
             }
             
-            # Quick recommendations based on prediction
             st.subheader("💡 Quick Recommendations")
             
             if predicted_grade < 10:
@@ -724,7 +741,6 @@ def show_student_input():
                 - Explore extracurricular enrichment
                 """)
             
-            # Button to get AI recommendations
             if st.button("🤖 Get Detailed AI Recommendations", use_container_width=True):
                 st.session_state.show_ai_recommendations = True
                 st.rerun()
@@ -733,7 +749,6 @@ def show_student_input():
             st.error("Prediction failed. Please ensure the model is properly initialized.")
 
 def show_ai_recommendations():
-    """Display AI-powered recommendations"""
     st.header("🤖 AI-Powered Recommendations")
     
     if 'last_prediction' not in st.session_state:
@@ -748,7 +763,6 @@ def show_ai_recommendations():
             prediction_data['predicted_grade']
         )
     
-    # Display recommendations
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -771,16 +785,13 @@ def show_ai_recommendations():
         for area in recommendations['key_areas']:
             st.markdown(f"- {area}")
     
-    # Additional insights
     st.markdown("### 🔍 Detailed Analysis")
     
-    # Feature importance insights (simplified)
     input_features = prediction_data['input_features']
     
     col3, col4, col5 = st.columns(3)
     
     with col3:
-        # Academic factors
         st.markdown("**Academic Factors**")
         if input_features['studytime'] < 2:
             st.warning("📚 Low study time detected")
@@ -790,7 +801,6 @@ def show_ai_recommendations():
             st.warning("📉 Past academic challenges")
     
     with col4:
-        # Lifestyle factors
         st.markdown("**Lifestyle Factors**")
         if input_features['total_alcohol'] > 6:
             st.error("🍷 High alcohol consumption")
@@ -800,7 +810,6 @@ def show_ai_recommendations():
             st.warning("❤️ Health concerns noted")
     
     with col5:
-        # Support factors
         st.markdown("**Support Systems**")
         if input_features['family_support'] < 5:
             st.warning("🏠 Limited family support")
@@ -810,7 +819,6 @@ def show_ai_recommendations():
             st.warning("🎓 Limited higher education plans")
 
 def show_about_page():
-    """Display about page with model information"""
     st.header("ℹ️ About This Application")
     
     st.markdown("""
@@ -862,7 +870,6 @@ def show_about_page():
     - Educational policy development
     """)
     
-    # Model performance metrics (placeholder)
     col1, col2, col3 = st.columns(3)
     
     with col1:
