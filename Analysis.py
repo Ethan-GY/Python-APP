@@ -1,3 +1,18 @@
+import os
+import subprocess
+import sys
+
+def install_from_requirements():
+    requirements_file = 'requirements.txt'
+    if os.path.exists(requirements_file):
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
+            print("Suceess")
+        except subprocess.CalledProcessError as e:
+            print(f"Failure: {e}")
+
+install_from_requirements()
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
