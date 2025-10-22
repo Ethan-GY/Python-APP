@@ -380,7 +380,7 @@ def get_ai_recommendations(student_data, predicted_grade):
         
         st.info("📊 Sending complete data analysis to Qwen AI...")
         with st.spinner("🤖 AI is conducting deep analysis of all features and model results..."):
-            response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=60)
+            response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=150)
         
         if response.status_code == 200:
             result = response.json()
