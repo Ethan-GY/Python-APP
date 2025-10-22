@@ -30,6 +30,7 @@ import warnings
 import streamlit as st
 import requests
 import json
+import re
 warnings.filterwarnings('ignore')
 
 # Set page configuration
@@ -102,7 +103,7 @@ class StudentPerformancePredictor:
         
         # Advanced feature engineering
         self._create_advanced_features()
-        
+    
     def _create_synthetic_data(self):
         """Create synthetic student data for demonstration"""
         np.random.seed(42)
@@ -263,7 +264,7 @@ def get_ai_recommendations(student_data, predicted_grade):
     # 首先定义 prompt 变量
     prompt = f"""
     As an educational expert, analyze this student profile and provide specific, actionable recommendations in Chinese:
-    
+
     学生档案分析：
     - 工作日饮酒：{student_data['Dalc']}/5
     - 周末饮酒：{student_data['Walc']}/5  
@@ -279,30 +280,27 @@ def get_ai_recommendations(student_data, predicted_grade):
     - 高等教育计划：{student_data['higher']}
     - 家庭支持：{student_data['famsup']}
     - 学校支持：{student_data['schoolsup']}
-    
+
     预测平均成绩：{predicted_grade:.1f}/20
-    
+
     请提供：
     1. 3个具体的学业改进策略
     2. 2个生活方式建议
     3. 2个支持系统增强方案
     4. 总体风险评估和关键干预领域
-    
+
     请确保建议具体、可行且针对该学生的具体情况。
     """
     
-    # API Configuration
-    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1"
-    QWEN_API_KEY = st.secrets.get("QWEN_API_KEY", "sk-bb0301c0ab834446b534fd3e6074622a")
-    
-    if not QWEN_API_KEY or QWEN_API_KEY == "sk-bb0301c0ab834446b534fd3e6074622a":
-        st.warning("⚠️ API Key未配置，使用备用推荐")
-        return get_fallback_recommendations()
+    # API Configuration - 使用你的API Key
+    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    QWEN_API_KEY = "sk-bb0301c0ab834446b534fd3e6074622a"
     
     try:
         headers = {
             "Authorization": f"Bearer {QWEN_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "X-DashScope-Async": "enable"
         }
         
         payload = {
@@ -335,53 +333,83 @@ def get_ai_recommendations(student_data, predicted_grade):
                 return parse_ai_response(ai_response)
             else:
                 st.error("API响应格式异常")
-                return get_fallback_recommendations()
+                return get_fallback_recommendations(predicted_grade)
         else:
             st.error(f"API请求失败: {response.status_code}")
-            return get_fallback_recommendations()
+            return get_fallback_recommendations(predicted_grade)
             
     except Exception as e:
         st.error(f"获取AI推荐时出错: {str(e)}")
-        return get_fallback_recommendations()
+        return get_fallback_recommendations(predicted_grade)
 
 def parse_ai_response(ai_text):
     """解析AI返回的文本并结构化为推荐格式"""
-    # 这里可以添加更复杂的解析逻辑
-    # 目前简单返回格式化结果
-    lines = ai_text.split('\n')
-    recommendations = []
-    
-    for line in lines:
-        line = line.strip()
-        if line and (line.startswith('-') or line.startswith('•') or line[0].isdigit()):
-            # 清理标记符号
-            clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
-            if clean_line and len(clean_line) > 10:  # 确保是有意义的建议
-                recommendations.append(clean_line)
-    
-    # 如果解析失败，使用默认推荐
-    if not recommendations:
-        return get_fallback_recommendations()
-    
-    return {
-        "recommendations": recommendations[:5],  # 取前5个建议
-        "risk_assessment": "基于AI分析的学生表现评估",
-        "key_areas": ["学习习惯", "时间管理", "支持系统"]
-    }
+    try:
+        lines = ai_text.split('\n')
+        recommendations = []
+        
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith('-') or line.startswith('•') or line[0].isdigit()):
+                # 清理标记符号
+                clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
+                if clean_line and len(clean_line) > 10:  # 确保是有意义的建议
+                    recommendations.append(clean_line)
+        
+        # 如果解析失败，使用默认推荐
+        if len(recommendations) < 3:
+            return get_fallback_recommendations(12.0)  # 使用默认成绩
+        
+        return {
+            "recommendations": recommendations[:5],  # 取前5个建议
+            "risk_assessment": "基于AI分析的个性化评估",
+            "key_areas": ["学习策略", "生活习惯", "支持系统"]
+        }
+    except:
+        return get_fallback_recommendations(12.0)
 
-def get_fallback_recommendations():
-    """备用推荐（当API不可用时使用）"""
-    return {
-        "recommendations": [
-            "创建一致的学习计划并设定具体目标",
-            "在考试期间限制社交活动",
-            "利用学校提供的资源和辅导",
-            "与老师保持定期沟通", 
-            "平衡学习时间与适当的休息和娱乐"
-        ],
-        "risk_assessment": "常规建议 - 实施一致的学习习惯",
-        "key_areas": ["时间管理", "学术支持", "健康生活方式"]
-    }
+def get_fallback_recommendations(predicted_grade):
+    """基于预测成绩的智能备用推荐"""
+    
+    if predicted_grade < 10:
+        risk_level = "高风险"
+        return {
+            "recommendations": [
+                "立即安排学习辅导和额外支持",
+                "制定详细的学习计划，每天固定学习时间",
+                "减少社交活动，专注于学业提升",
+                "与家长和老师建立定期沟通机制",
+                "关注出勤率，确保课堂参与"
+            ],
+            "risk_assessment": "高风险 - 需要立即干预和持续跟踪",
+            "key_areas": ["学习基础", "时间管理", "学习态度"]
+        }
+    elif predicted_grade < 14:
+        risk_level = "中等风险"
+        return {
+            "recommendations": [
+                "优化学习计划，提高学习效率",
+                "加强薄弱科目的练习和复习",
+                "合理安排学习和休息时间",
+                "积极参与课堂讨论和小组学习",
+                "定期进行学习效果评估"
+            ],
+            "risk_assessment": "中等风险 - 需要改进学习方法和习惯",
+            "key_areas": ["学习方法", "学习效率", "知识巩固"]
+        }
+    else:
+        risk_level = "低风险"
+        return {
+            "recommendations": [
+                "继续保持良好的学习习惯",
+                "挑战更高难度的学习内容",
+                "帮助其他同学共同进步",
+                "探索课外拓展学习机会",
+                "培养领导力和综合能力"
+            ],
+            "risk_assessment": "低风险 - 表现良好，可追求卓越",
+            "key_areas": ["能力拓展", "领导力培养", "综合发展"]
+        }
 
 def main():
     # Initialize predictor
@@ -753,7 +781,7 @@ def show_about_page():
     - Built with Streamlit for the user interface
     - Scikit-learn for machine learning
     - Pandas for data processing
-    - Integration with AI APIs for recommendations
+    - Integration with Qwen AI API for recommendations
     
     ### 📈 Use Cases
     - Early identification of at-risk students
