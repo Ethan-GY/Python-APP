@@ -259,104 +259,129 @@ class StudentPerformancePredictor:
 
 def get_ai_recommendations(student_data, predicted_grade):
     """Get AI-powered recommendations using Qwen API"""
-    # API Configuration - 在这里填写你的API信息
-    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/"  # Qwen API endpoint
-    QWEN_API_KEY = "sk-bb0301c0ab834446b534fd3e6074622a"  # 替换为你的API Key
     
-    # 可用的模型名称
-    available_models = {
-        "qwen-turbo": "qwen-turbo",        # 高速版，适合实时应用
-        "qwen-plus": "qwen-plus",          # 增强版，平衡性能与成本
-        "qwen-max": "qwen-max",            # 最强版，最高性能
-        "qwen-max-longcontext": "qwen-max-longcontext",  # 长文本版
-        "qwen-7b-chat": "qwen-7b-chat",    # 7B参数版本
-        "qwen-14b-chat": "qwen-14b-chat",  # 14B参数版本
-        "qwen-72b-chat": "qwen-72b-chat"   # 72B参数版本
-    }
-    
-    # 根据需求选择合适的模型
-    selected_model = "qwen-plus"  # 推荐使用这个，平衡性能与成本
-    
-    payload = {
-        "model": selected_model,
-        "input": {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "你是一名教育专家，根据计算的数据，专门分析学生表现和提供学术建议。请用中文回答。"
-                },
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
-            ]
-        },
-        "parameters": {
-            "max_tokens": 2000,
-            "temperature": 0.7
-        }
-    }
-    # Construct prompt for AI
+    # 首先定义 prompt 变量
     prompt = f"""
-    As an educational expert, analyze this student profile and provide specific, actionable recommendations:
+    As an educational expert, analyze this student profile and provide specific, actionable recommendations in Chinese:
     
-    Student Profile:
-    - Daily Alcohol Consumption: {student_data['Dalc']}/5
-    - Weekend Alcohol Consumption: {student_data['Walc']}/5
-    - Study Time: {student_data['studytime']} hours
-    - Absences: {student_data['absences']} days
-    - Past Failures: {student_data['failures']}
-    - Family Relationship Quality: {student_data['famrel']}/5
-    - Mother's Education: {student_data['Medu']}/4
-    - Father's Education: {student_data['Fedu']}/4
-    - Social Activity Level: {student_data['goout'] + student_data['freetime']}/10
-    - Health Status: {student_data['health']}/5
-    - Internet Access: {student_data['internet']}
-    - Higher Education Plans: {student_data['higher']}
-    - Family Support: {student_data['famsup']}
-    - School Support: {student_data['schoolsup']}
+    学生档案分析：
+    - 工作日饮酒：{student_data['Dalc']}/5
+    - 周末饮酒：{student_data['Walc']}/5  
+    - 学习时间：{student_data['studytime']} 小时
+    - 缺勤天数：{student_data['absences']} 天
+    - 过往不及格：{student_data['failures']} 次
+    - 家庭关系质量：{student_data['famrel']}/5
+    - 母亲教育程度：{student_data['Medu']}/4
+    - 父亲教育程度：{student_data['Fedu']}/4
+    - 社交活动水平：{student_data['goout'] + student_data['freetime']}/10
+    - 健康状况：{student_data['health']}/5
+    - 家庭网络：{student_data['internet']}
+    - 高等教育计划：{student_data['higher']}
+    - 家庭支持：{student_data['famsup']}
+    - 学校支持：{student_data['schoolsup']}
     
-    Predicted Average Grade: {predicted_grade:.1f}/20
+    预测平均成绩：{predicted_grade:.1f}/20
     
-    Please provide:
-    1. 3 specific academic improvement strategies
-    2. 2 lifestyle recommendations
-    3. 2 support system enhancements
-    4. Overall risk assessment and key areas for intervention
+    请提供：
+    1. 3个具体的学业改进策略
+    2. 2个生活方式建议
+    3. 2个支持系统增强方案
+    4. 总体风险评估和关键干预领域
     
-    Keep recommendations practical and tailored to this specific student profile.
+    请确保建议具体、可行且针对该学生的具体情况。
     """
     
+    # API Configuration
+    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    QWEN_API_KEY = st.secrets.get("QWEN_API_KEY", "your_api_key_here")
+    
+    if not QWEN_API_KEY or QWEN_API_KEY == "your_api_key_here":
+        st.warning("⚠️ API Key未配置，使用备用推荐")
+        return get_fallback_recommendations()
+    
     try:
-        # Qwen API call (replace with actual API endpoint and credentials)
-        # This is a placeholder - you'll need to implement actual API integration
-        response = {
-            "recommendations": [
-                "Develop a structured study schedule with dedicated time for each subject",
-                "Reduce alcohol consumption, especially during weekdays",
-                "Seek additional academic support through school tutoring programs",
-                "Improve attendance and participate more in class activities",
-                "Enhance family communication about academic goals and challenges"
-            ],
-            "risk_assessment": "Medium risk - Focus on study habits and attendance improvement",
-            "key_areas": ["Study consistency", "Alcohol consumption", "Class attendance"]
+        headers = {
+            "Authorization": f"Bearer {QWEN_API_KEY}",
+            "Content-Type": "application/json"
         }
         
-        return response
+        payload = {
+            "model": "qwen-plus",
+            "input": {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是一名教育专家，专门分析学生表现和提供学术建议。请用专业但易懂的中文回答，提供具体可行的建议。"
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            },
+            "parameters": {
+                "max_tokens": 2000,
+                "temperature": 0.7
+            }
+        }
         
+        response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            # 解析响应
+            if "output" in result and "choices" in result["output"]:
+                ai_response = result["output"]["choices"][0]["message"]["content"]
+                return parse_ai_response(ai_response)
+            else:
+                st.error("API响应格式异常")
+                return get_fallback_recommendations()
+        else:
+            st.error(f"API请求失败: {response.status_code}")
+            return get_fallback_recommendations()
+            
     except Exception as e:
-        # Fallback recommendations if API fails
-        return {
-            "recommendations": [
-                "Create a consistent study routine with specific goals",
-                "Limit social activities during exam periods",
-                "Utilize available school resources and tutoring",
-                "Maintain regular communication with teachers",
-                "Balance study time with adequate rest and recreation"
-            ],
-            "risk_assessment": "General recommendations - implement consistent study habits",
-            "key_areas": ["Time management", "Academic support", "Healthy lifestyle"]
-        }
+        st.error(f"获取AI推荐时出错: {str(e)}")
+        return get_fallback_recommendations()
+
+def parse_ai_response(ai_text):
+    """解析AI返回的文本并结构化为推荐格式"""
+    # 这里可以添加更复杂的解析逻辑
+    # 目前简单返回格式化结果
+    lines = ai_text.split('\n')
+    recommendations = []
+    
+    for line in lines:
+        line = line.strip()
+        if line and (line.startswith('-') or line.startswith('•') or line[0].isdigit()):
+            # 清理标记符号
+            clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
+            if clean_line and len(clean_line) > 10:  # 确保是有意义的建议
+                recommendations.append(clean_line)
+    
+    # 如果解析失败，使用默认推荐
+    if not recommendations:
+        return get_fallback_recommendations()
+    
+    return {
+        "recommendations": recommendations[:5],  # 取前5个建议
+        "risk_assessment": "基于AI分析的学生表现评估",
+        "key_areas": ["学习习惯", "时间管理", "支持系统"]
+    }
+
+def get_fallback_recommendations():
+    """备用推荐（当API不可用时使用）"""
+    return {
+        "recommendations": [
+            "创建一致的学习计划并设定具体目标",
+            "在考试期间限制社交活动",
+            "利用学校提供的资源和辅导",
+            "与老师保持定期沟通", 
+            "平衡学习时间与适当的休息和娱乐"
+        ],
+        "risk_assessment": "常规建议 - 实施一致的学习习惯",
+        "key_areas": ["时间管理", "学术支持", "健康生活方式"]
+    }
 
 def main():
     # Initialize predictor
