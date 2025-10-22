@@ -293,9 +293,9 @@ def get_ai_recommendations(student_data, predicted_grade):
     
     # API Configuration
     QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
-    QWEN_API_KEY = st.secrets.get("QWEN_API_KEY", "your_api_key_here")
+    QWEN_API_KEY = st.secrets.get("QWEN_API_KEY", "sk-bb0301c0ab834446b534fd3e6074622a")
     
-    if not QWEN_API_KEY or QWEN_API_KEY == "your_api_key_here":
+    if not QWEN_API_KEY or QWEN_API_KEY == "sk-bb0301c0ab834446b534fd3e6074622a":
         st.warning("⚠️ API Key未配置，使用备用推荐")
         return get_fallback_recommendations()
     
