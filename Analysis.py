@@ -319,43 +319,31 @@ def get_ai_recommendations(student_data, predicted_grade):
     - 回答结构清晰，使用标题和编号
     """
     
-    # 千问API配置
     QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
     QWEN_API_KEY = "sk-bb0301c0ab834446b534fd3e6074622a"
-    
+
     try:
+        # 1. 移除了 "X-DashScope-Async" 请求头
         headers = {
             "Authorization": f"Bearer {QWEN_API_KEY}",
-            "Content-Type": "application/json",
-            "X-DashScope-Async": "enable"  # 启用异步处理
+            "Content-Type": "application/json"
         }
-        
-        # 千问API专用格式
+
         payload = {
-            "model": "qwen2.5-72b-instruct",  # 指定千问模型
+            "model": "qwen2.5-72b-instruct", 
             "input": {
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": """你是一位资深教育顾问，拥有20年学生辅导经验。
-                        你擅长分析学生学习行为、识别潜在问题并提供切实可行的改进方案。
-                        你的建议总是基于数据驱动，兼顾学生的心理状态和实际可行性。
-                        请用中文回答，确保建议专业、具体且易于理解。"""
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "system", "content": "..."},
+                    {"role": "user", "content": prompt}
                 ]
             },
             "parameters": {
-                "max_tokens": 4000,  # 增加token限制以适应更长的分析
-                "temperature": 0.7,
-                "top_p": 0.8,
-                "repetition_penalty": 1.1
+                "max_tokens": 4000,
+                "temperature": 0.7
             }
         }
-        
+
+        # 2. 使用同步请求
         with st.spinner("🤖 AI正在深度分析学生情况..."):
             response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=60)
         
