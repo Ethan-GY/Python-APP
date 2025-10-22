@@ -263,79 +263,50 @@ def get_ai_recommendations(student_data, predicted_grade):
     
     # 首先定义 prompt 变量
     prompt = f"""
-    As an educational expert, analyze this student profile and provide specific, actionable recommendations in Chinese:
-
-    学生档案分析：
-    - 工作日饮酒：{student_data['Dalc']}/5
-    - 周末饮酒：{student_data['Walc']}/5  
-    - 学习时间：{student_data['studytime']} 小时
-    - 缺勤天数：{student_data['absences']} 天
-    - 过往不及格：{student_data['failures']} 次
-    - 家庭关系质量：{student_data['famrel']}/5
-    - 母亲教育程度：{student_data['Medu']}/4
-    - 父亲教育程度：{student_data['Fedu']}/4
-    - 社交活动水平：{student_data['goout'] + student_data['freetime']}/10
-    - 健康状况：{student_data['health']}/5
-    - 家庭网络：{student_data['internet']}
-    - 高等教育计划：{student_data['higher']}
-    - 家庭支持：{student_data['famsup']}
-    - 学校支持：{student_data['schoolsup']}
-
-    预测平均成绩：{predicted_grade:.1f}/20
-
-    请提供：
-    1. 3个具体的学业改进策略
-    2. 2个生活方式建议
-    3. 2个支持系统增强方案
-    4. 总体风险评估和关键干预领域
-
-    请确保建议具体、可行且针对该学生的具体情况。
+    [你的prompt内容保持不变]
     """
     
-    # API Configuration - 使用你的API Key
-    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    # API Configuration - 修改这部分
+    QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     QWEN_API_KEY = "sk-bb0301c0ab834446b534fd3e6074622a"
     
     try:
         headers = {
             "Authorization": f"Bearer {QWEN_API_KEY}",
-            "Content-Type": "application/json",
-            "X-DashScope-Async": "enable"
+            "Content-Type": "application/json"
+            # 移除 "X-DashScope-Async": "enable" 这行
         }
         
+        # 修改payload格式为OpenAI兼容格式
         payload = {
-            "model": "qwen-plus",
-            "input": {
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "你是一名教育专家，专门分析学生表现和提供学术建议。请用专业但易懂的中文回答，提供具体可行的建议。"
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            },
-            "parameters": {
-                "max_tokens": 2000,
-                "temperature": 0.7
-            }
+            "model": "qwen-turbo",  # 或者尝试 "qwen-plus"
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "你是一名教育专家，专门分析学生表现和提供学术建议。请用专业但易懂的中文回答，提供具体可行的建议。"
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 2000,
+            "temperature": 0.7
         }
         
         response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=30)
         
         if response.status_code == 200:
             result = response.json()
-            # 解析响应
-            if "output" in result and "choices" in result["output"]:
-                ai_response = result["output"]["choices"][0]["message"]["content"]
+            # 修改响应解析为OpenAI格式
+            if "choices" in result:
+                ai_response = result["choices"][0]["message"]["content"]
                 return parse_ai_response(ai_response)
             else:
-                st.error("API响应格式异常")
+                st.error(f"API响应格式异常: {result}")
                 return get_fallback_recommendations(predicted_grade)
         else:
-            st.error(f"API请求失败: {response.status_code}")
+            st.error(f"API请求失败: {response.status_code} - {response.text}")
             return get_fallback_recommendations(predicted_grade)
             
     except Exception as e:
