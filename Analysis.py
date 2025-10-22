@@ -261,125 +261,250 @@ class StudentPerformancePredictor:
 def get_ai_recommendations(student_data, predicted_grade):
     """Get AI-powered recommendations using Qwen API"""
     
-    # 首先定义 prompt 变量
+    # 完整详细的prompt - 针对千问模型优化
     prompt = f"""
-    [你的prompt内容保持不变]
+    请你作为一名资深教育专家，深度分析以下学生档案，提供具体、可执行的改进建议。
+    
+    【学生详细档案】
+    - 工作日饮酒频率：{student_data['Dalc']}/5（1=非常低，5=非常高）
+    - 周末饮酒频率：{student_data['Walc']}/5（1=非常低，5=非常高）
+    - 每周学习时间：{student_data['studytime']}小时（1=<2小时，2=2-5小时，3=5-10小时，4=>10小时）
+    - 缺勤天数：{student_data['absences']}天
+    - 过往不及格科目数：{student_data['failures']}门
+    - 家庭关系质量：{student_data['famrel']}/5（1=非常差，5=非常好）
+    - 母亲教育程度：{student_data['Medu']}/4（0=无，1=小学，2=初中，3=高中，4=高等教育）
+    - 父亲教育程度：{student_data['Fedu']}/4（0=无，1=小学，2=初中，3=高中，4=高等教育）
+    - 社交活跃度：{student_data['goout'] + student_data['freetime']}/10（外出频率+空闲时间）
+    - 健康状况：{student_data['health']}/5（1=非常差，5=非常好）
+    - 家庭网络接入：{student_data['internet']}
+    - 是否有高等教育计划：{student_data['higher']}
+    - 家庭学习支持：{student_data['famsup']}
+    - 学校额外支持：{student_data['schoolsup']}
+    - 额外付费课程：{student_data['paid']}
+    - 课外活动参与：{student_data['activities']}
+    - 恋爱状态：{student_data['romantic']}
+    
+    【预测平均成绩】{predicted_grade:.1f}/20分
+    
+    【分析要求】
+    请基于以上信息，深入思考并提供：
+    
+    1. 学业表现深度分析：
+       - 该学生的优势领域和潜在能力
+       - 主要的学习障碍和挑战
+       - 成绩预测的合理性评估
+    
+    2. 个性化改进策略（按优先级排序）：
+       - 3个最紧迫的学术改进措施
+       - 2个关键的生活方式调整
+       - 2个支持系统优化方案
+    
+    3. 风险评估与干预建议：
+       - 综合风险等级评估
+       - 需要立即关注的关键领域
+       - 长期发展建议
+    
+    4. 具体行动计划：
+       - 短期目标（1个月内）
+       - 中期目标（3个月内）
+       - 长期发展路径
+    
+    【回答要求】
+    - 所有建议必须具体可操作，有明确的执行步骤
+    - 针对该学生的独特情况量身定制
+    - 基于教育心理学和最佳实践
+    - 考虑学生的心理状态和动机水平
+    - 包含可衡量的进度指标
+    - 用专业但易懂的中文回答，避免使用过于学术化的术语
+    - 回答结构清晰，使用标题和编号
     """
     
-    # API Configuration - 修改这部分
-    QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    # 千问API配置
+    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
     QWEN_API_KEY = "sk-bb0301c0ab834446b534fd3e6074622a"
     
     try:
         headers = {
             "Authorization": f"Bearer {QWEN_API_KEY}",
-            "Content-Type": "application/json"
-            # 移除 "X-DashScope-Async": "enable" 这行
+            "Content-Type": "application/json",
+            "X-DashScope-Async": "enable"  # 启用异步处理
         }
         
-        # 修改payload格式为OpenAI兼容格式
+        # 千问API专用格式
         payload = {
-            "model": "qwen-turbo",  # 或者尝试 "qwen-plus"
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "你是一名教育专家，专门分析学生表现和提供学术建议。请用专业但易懂的中文回答，提供具体可行的建议。"
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "max_tokens": 2000,
-            "temperature": 0.7
+            "model": "qwen2.5-72b-instruct",  # 指定千问模型
+            "input": {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": """你是一位资深教育顾问，拥有20年学生辅导经验。
+                        你擅长分析学生学习行为、识别潜在问题并提供切实可行的改进方案。
+                        你的建议总是基于数据驱动，兼顾学生的心理状态和实际可行性。
+                        请用中文回答，确保建议专业、具体且易于理解。"""
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            },
+            "parameters": {
+                "max_tokens": 4000,  # 增加token限制以适应更长的分析
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "repetition_penalty": 1.1
+            }
         }
         
-        response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=30)
+        with st.spinner("🤖 AI正在深度分析学生情况..."):
+            response = requests.post(QWEN_API_URL, headers=headers, json=payload, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
-            # 修改响应解析为OpenAI格式
-            if "choices" in result:
-                ai_response = result["choices"][0]["message"]["content"]
-                return parse_ai_response(ai_response)
+            
+            # 解析千问API响应格式
+            if "output" in result and "choices" in result["output"]:
+                ai_response = result["output"]["choices"][0]["message"]["content"]
+                st.success("✅ 千问AI分析完成！")
+                return parse_qwen_response(ai_response)
             else:
-                st.error(f"API响应格式异常: {result}")
+                st.error(f"千问API响应格式异常: {result}")
                 return get_fallback_recommendations(predicted_grade)
         else:
-            st.error(f"API请求失败: {response.status_code} - {response.text}")
+            error_msg = f"千问API请求失败: {response.status_code}"
+            if response.status_code == 400:
+                error_msg += " - 请求参数错误"
+            elif response.status_code == 401:
+                error_msg += " - API Key无效或过期"
+            elif response.status_code == 403:
+                error_msg += " - 权限不足或模型不可用"
+            elif response.status_code == 429:
+                error_msg += " - 请求频率限制"
+            elif response.status_code == 500:
+                error_msg += " - 服务器内部错误"
+            elif response.status_code == 503:
+                error_msg += " - 服务暂时不可用"
+            
+            st.error(error_msg)
+            
+            # 显示更多调试信息
+            try:
+                error_detail = response.json()
+                st.write(f"错误详情: {error_detail}")
+            except:
+                st.write(f"响应内容: {response.text}")
+            
+            st.info("使用基于规则的智能推荐作为备选方案")
             return get_fallback_recommendations(predicted_grade)
             
+    except requests.exceptions.Timeout:
+        st.error("千问API请求超时，请稍后重试")
+        return get_fallback_recommendations(predicted_grade)
     except Exception as e:
-        st.error(f"获取AI推荐时出错: {str(e)}")
+        st.error(f"获取千问AI推荐时出错: {str(e)}")
         return get_fallback_recommendations(predicted_grade)
 
-def parse_ai_response(ai_text):
-    """解析AI返回的文本并结构化为推荐格式"""
+def parse_qwen_response(ai_text):
+    """解析千问模型返回的文本并结构化为推荐格式"""
     try:
+        # 显示原始AI响应（用于调试）
+        with st.expander("查看千问AI完整分析"):
+            st.text_area("AI原始响应", ai_text, height=300)
+        
         lines = ai_text.split('\n')
         recommendations = []
+        risk_assessment = "基于千问AI的深度分析评估"
+        key_areas = []
         
-        for line in lines:
+        # 提取关键信息
+        section_headers = ["改进策略", "风险评估", "关键领域", "行动计划", "建议"]
+        
+        for i, line in enumerate(lines):
             line = line.strip()
-            if line and (line.startswith('-') or line.startswith('•') or line[0].isdigit()):
-                # 清理标记符号
+            
+            # 提取风险评估
+            if any(keyword in line for keyword in ["风险", "评估", "等级"]) and len(line) < 100:
+                risk_assessment = line
+            
+            # 提取关键领域
+            if any(keyword in line for keyword in ["领域", "关注", "重点", "方面"]) and len(line) < 80:
+                clean_line = re.sub(r'^[•\-\d\.\s、：:]+', '', line).strip()
+                if clean_line and len(clean_line) > 2 and len(clean_line) < 50:
+                    key_areas.append(clean_line)
+            
+            # 提取具体建议 - 更宽松的匹配条件
+            if line and (line.startswith(('-', '•', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '10.')) or 
+                        (len(line) > 10 and any(keyword in line for keyword in 
+                        ['建议', '应该', '可以', '需要', '推荐', '措施', '方案', '策略', '目标']))):
                 clean_line = re.sub(r'^[•\-\d\.\s]+', '', line).strip()
-                if clean_line and len(clean_line) > 10:  # 确保是有意义的建议
+                if (clean_line and len(clean_line) > 8 and 
+                    clean_line not in recommendations and
+                    not any(header in clean_line for header in section_headers)):
                     recommendations.append(clean_line)
         
-        # 如果解析失败，使用默认推荐
+        # 确保有足够的关键领域
+        if not key_areas:
+            key_areas = ["学习方法优化", "时间管理改进", "支持系统建设"]
+        
+        # 如果建议太少，使用备用推荐
         if len(recommendations) < 3:
-            return get_fallback_recommendations(12.0)  # 使用默认成绩
+            st.warning("千问AI返回的建议较少，补充备用建议")
+            fallback = get_fallback_recommendations(12.0)
+            recommendations = recommendations + fallback["recommendations"][:3]
         
         return {
-            "recommendations": recommendations[:5],  # 取前5个建议
-            "risk_assessment": "基于AI分析的个性化评估",
-            "key_areas": ["学习策略", "生活习惯", "支持系统"]
+            "recommendations": recommendations[:8],  # 最多8个建议
+            "risk_assessment": risk_assessment,
+            "key_areas": list(set(key_areas))[:4]  # 去重并最多4个关键领域
         }
-    except:
+    except Exception as e:
+        st.error(f"解析千问AI响应时出错: {str(e)}")
         return get_fallback_recommendations(12.0)
 
 def get_fallback_recommendations(predicted_grade):
     """基于预测成绩的智能备用推荐"""
     
     if predicted_grade < 10:
-        risk_level = "高风险"
         return {
             "recommendations": [
-                "立即安排学习辅导和额外支持",
-                "制定详细的学习计划，每天固定学习时间",
-                "减少社交活动，专注于学业提升",
-                "与家长和老师建立定期沟通机制",
-                "关注出勤率，确保课堂参与"
+                "立即安排一对一学习辅导，每周至少3次",
+                "制定详细的学习计划表，精确到每天的学习任务",
+                "建立家长-教师定期沟通机制，每周反馈学习情况",
+                "减少社交活动至每周1次，专注学业提升",
+                "参加学校提供的额外学习支持课程",
+                "建立学习目标追踪系统，每周评估进度",
+                "寻求心理辅导支持，提升学习动机和自信心"
             ],
-            "risk_assessment": "高风险 - 需要立即干预和持续跟踪",
-            "key_areas": ["学习基础", "时间管理", "学习态度"]
+            "risk_assessment": "高风险 - 需要立即干预和全方位支持",
+            "key_areas": ["学习基础巩固", "时间管理优化", "心理支持建设"]
         }
     elif predicted_grade < 14:
-        risk_level = "中等风险"
         return {
             "recommendations": [
-                "优化学习计划，提高学习效率",
-                "加强薄弱科目的练习和复习",
-                "合理安排学习和休息时间",
-                "积极参与课堂讨论和小组学习",
-                "定期进行学习效果评估"
+                "优化学习方法，引入主动学习策略",
+                "加强薄弱科目的专项练习，每周额外2小时",
+                "建立学习小组，与同学互相监督和帮助",
+                "制定周学习计划，平衡各科目学习时间",
+                "利用在线学习资源补充课堂知识",
+                "定期进行学习效果自我评估和调整",
+                "参加课外学术活动，拓展学习视野"
             ],
-            "risk_assessment": "中等风险 - 需要改进学习方法和习惯",
-            "key_areas": ["学习方法", "学习效率", "知识巩固"]
+            "risk_assessment": "中等风险 - 需要系统改进学习方法和习惯",
+            "key_areas": ["学习方法改进", "学习效率提升", "知识体系构建"]
         }
     else:
-        risk_level = "低风险"
         return {
             "recommendations": [
-                "继续保持良好的学习习惯",
-                "挑战更高难度的学习内容",
-                "帮助其他同学共同进步",
-                "探索课外拓展学习机会",
-                "培养领导力和综合能力"
+                "继续保持高效学习习惯，探索更深层次知识",
+                "挑战高阶课程或参加学术竞赛",
+                "担任学习小组负责人，帮助其他同学",
+                "探索跨学科学习机会，拓展知识边界",
+                "参与科研项目或学术论文写作",
+                "培养领导力和公众表达能力",
+                "规划长期学术发展路径和职业方向"
             ],
-            "risk_assessment": "低风险 - 表现良好，可追求卓越",
-            "key_areas": ["能力拓展", "领导力培养", "综合发展"]
+            "risk_assessment": "低风险 - 表现优秀，可追求卓越发展",
+            "key_areas": ["能力深度拓展", "领导力培养", "综合素养提升"]
         }
 
 def main():
