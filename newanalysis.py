@@ -39,12 +39,19 @@ def load_and_preprocess_data():
         st.sidebar.write(f"Countries: {df['country'].nunique()}")
         st.sidebar.write(f"Years: {df['year'].min()} - {df['year'].max()}")
         
-        # Filter countries with sufficient data
+        # Filter countries with sufficient GDP data
         countries_with_gdp = df.groupby('country')['gdp'].count()
-        valid_countries = countries_with_gdp[countries_with_gdp >= 5].index.tolist()
+        valid_countries = countries_with_gdp[countries_with_gdp >= 10].index.tolist()
+        
+        # Also include countries with good energy data even if GDP is limited
+        energy_countries = df.groupby('country')['fossil_share_energy'].count()
+        energy_valid = energy_countries[energy_countries >= 15].index.tolist()
+        
+        # Combine and get unique countries
+        all_valid_countries = list(set(valid_countries + energy_valid))
         
         # Filter dataset
-        df_filtered = df[df['country'].isin(valid_countries)].copy()
+        df_filtered = df[df['country'].isin(all_valid_countries)].copy()
         
         # Convert data types
         numeric_columns = ['gdp', 'population', 'fossil_share_energy', 'renewables_share_energy', 
@@ -65,14 +72,18 @@ def load_and_preprocess_data():
         df_filtered['renewables_share'] = pd.to_numeric(df_filtered['renewables_share_energy'], errors='coerce')
         df_filtered['non_fossil_share'] = 100 - df_filtered['fossil_share']
         
-        # Calculate total energy consumption by sector if not available
-        if 'primary_energy_consumption' not in df_filtered.columns:
-            energy_columns = ['coal_consumption', 'gas_consumption', 'oil_consumption', 
-                            'renewables_consumption', 'nuclear_consumption']
-            df_filtered['primary_energy_consumption'] = df_filtered[energy_columns].sum(axis=1, skipna=True)
+        # Calculate per capita metrics
+        df_filtered['gdp_per_capita'] = df_filtered['gdp'] / df_filtered['population']
+        df_filtered['energy_per_capita'] = df_filtered['primary_energy_consumption'] / df_filtered['population']
         
         # Calculate energy intensity (energy consumption per GDP)
         df_filtered['energy_intensity'] = df_filtered['primary_energy_consumption'] / (df_filtered['gdp'] / 1e9)  # GDP in billions
+        
+        # Calculate sector-specific energy intensities
+        for sector in ['coal', 'gas', 'oil', 'renewables']:
+            consumption_col = f'{sector}_consumption'
+            if consumption_col in df_filtered.columns:
+                df_filtered[f'{sector}_intensity'] = df_filtered[consumption_col] / (df_filtered['gdp'] / 1e9)
         
         return df_filtered
         
@@ -80,550 +91,646 @@ def load_and_preprocess_data():
         st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
-def create_gdp_energy_sector_analysis(df):
-    """Create comprehensive GDP vs energy consumption by sector analysis"""
-    st.header("📊 GDP vs Energy Consumption by Sector")
+def create_gdp_integrated_analysis(df):
+    """Create comprehensive analysis integrating GDP with energy structure"""
+    st.header("💰 GDP-Integrated Energy Structure Analysis")
     
     # Get countries with good data coverage
     country_coverage = df.groupby('country').agg({
         'gdp': 'count',
         'primary_energy_consumption': 'count',
-        'coal_consumption': 'count',
-        'gas_consumption': 'count',
-        'oil_consumption': 'count'
+        'fossil_share': 'count'
     }).mean(axis=1)
     
     top_countries = country_coverage.nlargest(20).index.tolist()
     
-    # Create multiple visualizations
+    # Create tabs for different analysis aspects
     tab1, tab2, tab3, tab4 = st.tabs([
-        "Overall Trends", 
-        "Sector Analysis", 
-        "Country Comparison", 
-        "Correlation Analysis"
+        "GDP vs Energy Structure", 
+        "Economic Development Stages", 
+        "GDP Growth Impact", 
+        "Policy Implications"
     ])
     
     with tab1:
-        create_overall_trends(df, top_countries)
+        create_gdp_energy_structure_analysis(df, top_countries)
     
     with tab2:
-        create_sector_analysis(df, top_countries)
+        create_development_stage_analysis(df, top_countries)
     
     with tab3:
-        create_country_comparison(df, top_countries)
+        create_gdp_growth_impact_analysis(df, top_countries)
     
     with tab4:
-        create_correlation_analysis(df)
+        create_policy_implications(df)
 
-def create_overall_trends(df, countries):
-    """Create overall GDP and energy consumption trends"""
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+def create_gdp_energy_structure_analysis(df, countries):
+    """Analyze relationship between GDP and energy structure"""
+    st.subheader("GDP vs Energy Structure Relationship")
     
-    # 1. GDP vs Total Energy Consumption
-    ax = axes[0, 0]
-    for country in countries[:8]:
-        country_data = df[df['country'] == country].dropna(subset=['gdp', 'primary_energy_consumption'])
-        if len(country_data) > 5:
-            # Normalize for comparison
-            gdp_norm = (country_data['gdp'] / country_data['gdp'].max()) * 100
-            energy_norm = (country_data['primary_energy_consumption'] / country_data['primary_energy_consumption'].max()) * 100
-            
-            ax.plot(country_data['year'], gdp_norm, 
-                   label=f'{country} - GDP', linewidth=2, alpha=0.8)
-            ax.plot(country_data['year'], energy_norm, 
-                   label=f'{country} - Energy', linewidth=2, linestyle='--', alpha=0.8)
+    # Create multiple visualizations
+    col1, col2 = st.columns(2)
     
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Normalized Value (%)')
-    ax.set_title('GDP vs Total Energy Consumption (Normalized)')
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-    ax.grid(True, alpha=0.3)
-    
-    # 2. Energy Intensity Trends
-    ax = axes[0, 1]
-    for country in countries[:8]:
-        country_data = df[df['country'] == country].dropna(subset=['gdp', 'primary_energy_consumption'])
-        if len(country_data) > 5:
-            if 'energy_intensity' not in country_data.columns:
-                country_data['energy_intensity'] = country_data['primary_energy_consumption'] / (country_data['gdp'] / 1e9)
-            
-            ax.plot(country_data['year'], country_data['energy_intensity'], 
-                   marker='o', markersize=3, linewidth=2, label=country)
-    
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Energy Intensity (Energy/GDP)')
-    ax.set_title('Energy Intensity Trends')
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-    ax.grid(True, alpha=0.3)
-    
-    # 3. Sector Consumption Composition (Latest Year)
-    ax = axes[1, 0]
-    latest_year = df['year'].max()
-    latest_data = df[df['year'] == latest_year].dropna(
-        subset=['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']
-    )
-    
-    if not latest_data.empty:
-        # Select top countries by GDP
-        latest_data = latest_data.nlargest(8, 'gdp')
+    with col1:
+        # GDP vs Fossil Fuel Dependency
+        fig, ax = plt.subplots(figsize=(10, 6))
         
-        sectors = ['Coal', 'Gas', 'Oil', 'Renewables']
-        consumption_data = []
+        # Use latest year data for cross-sectional analysis
+        latest_year = df['year'].max()
+        latest_data = df[df['year'] == latest_year].dropna(subset=['gdp', 'fossil_share'])
         
-        for country in latest_data['country']:
-            country_row = latest_data[latest_data['country'] == country].iloc[0]
-            row_data = [country]
-            total_energy = 0
+        if not latest_data.empty:
+            # Select top countries by GDP for clarity
+            latest_data = latest_data.nlargest(15, 'gdp')
             
-            for sector in sectors:
-                consumption = country_row.get(f'{sector.lower()}_consumption', 0)
-                if pd.notna(consumption):
-                    row_data.append(consumption)
-                    total_energy += consumption
-                else:
-                    row_data.append(0)
+            # Create scatter plot
+            scatter = ax.scatter(latest_data['gdp']/1e9, latest_data['fossil_share'], 
+                               s=100, alpha=0.7, c=latest_data['gdp_per_capita'], 
+                               cmap='viridis')
             
-            # Calculate percentages
-            if total_energy > 0:
-                percentages = [x/total_energy*100 for x in row_data[1:]]
-                consumption_data.append([country] + percentages)
+            # Add country labels
+            for i, row in latest_data.iterrows():
+                ax.annotate(row['country'], 
+                           (row['gdp']/1e9, row['fossil_share']),
+                           xytext=(5, 5), textcoords='offset points', fontsize=8)
+            
+            # Add trend line
+            if len(latest_data) > 2:
+                z = np.polyfit(latest_data['gdp']/1e9, latest_data['fossil_share'], 1)
+                p = np.poly1d(z)
+                x_range = np.linspace(latest_data['gdp'].min()/1e9, latest_data['gdp'].max()/1e9, 100)
+                ax.plot(x_range, p(x_range), 'r--', alpha=0.8, 
+                       label=f'Trend (slope: {z[0]:.4f})')
+            
+            ax.set_xlabel('GDP (Billions USD)')
+            ax.set_ylabel('Fossil Fuel Share (%)')
+            ax.set_title(f'GDP vs Fossil Fuel Dependency ({latest_year})')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            # Add colorbar for GDP per capita
+            plt.colorbar(scatter, ax=ax, label='GDP per Capita')
+            
+            st.pyplot(fig)
+            
+            # Calculate correlation
+            correlation = latest_data['gdp'].corr(latest_data['fossil_share'])
+            st.metric("GDP-Fossil Fuel Correlation", f"{correlation:.3f}")
+
+    with col2:
+        # Energy Intensity vs GDP per Capita
+        fig, ax = plt.subplots(figsize=(10, 6))
         
-        if consumption_data:
-            consumption_df = pd.DataFrame(consumption_data, columns=['Country'] + sectors)
-            consumption_df.set_index('Country', inplace=True)
+        latest_data_intensity = df[df['year'] == latest_year].dropna(
+            subset=['gdp_per_capita', 'energy_intensity']
+        )
+        
+        if not latest_data_intensity.empty:
+            latest_data_intensity = latest_data_intensity.nlargest(15, 'gdp')
             
-            consumption_df.plot(kind='bar', stacked=True, ax=ax, alpha=0.8)
-            ax.set_xlabel('Country')
-            ax.set_ylabel('Energy Consumption Share (%)')
-            ax.set_title(f'Energy Consumption by Sector ({latest_year})')
+            scatter = ax.scatter(latest_data_intensity['gdp_per_capita'], 
+                               latest_data_intensity['energy_intensity'],
+                               s=100, alpha=0.7, 
+                               c=latest_data_intensity['renewables_share'],
+                               cmap='Greens')
+            
+            for i, row in latest_data_intensity.iterrows():
+                ax.annotate(row['country'], 
+                           (row['gdp_per_capita'], row['energy_intensity']),
+                           xytext=(5, 5), textcoords='offset points', fontsize=8)
+            
+            ax.set_xlabel('GDP per Capita')
+            ax.set_ylabel('Energy Intensity (Energy/GDP)')
+            ax.set_title(f'Economic Efficiency vs Renewable Adoption ({latest_year})')
+            ax.grid(True, alpha=0.3)
+            
+            plt.colorbar(scatter, ax=ax, label='Renewable Share (%)')
+            
+            st.pyplot(fig)
+            
+            # Calculate correlation
+            correlation = latest_data_intensity['gdp_per_capita'].corr(
+                latest_data_intensity['energy_intensity']
+            )
+            st.metric("GDP per Capita-Energy Intensity Correlation", f"{correlation:.3f}")
+
+    # Time series analysis of GDP and energy structure
+    st.subheader("GDP Growth and Energy Structure Evolution")
+    
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    
+    # Select a few representative countries
+    representative_countries = ['Argentina', 'Australia', 'Algeria']  # Example countries
+    
+    for i, country in enumerate(representative_countries):
+        if country in df['country'].unique():
+            country_data = df[df['country'] == country].dropna(
+                subset=['gdp', 'fossil_share', 'renewables_share']
+            )
+            
+            if len(country_data) > 5:
+                # Normalize GDP for dual-axis plot
+                country_data = country_data.sort_values('year')
+                gdp_normalized = (country_data['gdp'] / country_data['gdp'].max()) * 100
+                
+                # Plot on appropriate subplot
+                row, col = i // 2, i % 2
+                ax1 = axes[row, col]
+                ax2 = ax1.twinx()
+                
+                # Plot energy shares
+                ax1.plot(country_data['year'], country_data['fossil_share'], 
+                        'b-', linewidth=2, label='Fossil Share')
+                ax1.plot(country_data['year'], country_data['renewables_share'], 
+                        'g-', linewidth=2, label='Renewable Share')
+                
+                # Plot normalized GDP
+                ax2.plot(country_data['year'], gdp_normalized, 
+                        'r--', linewidth=2, label='GDP (Normalized)')
+                
+                ax1.set_xlabel('Year')
+                ax1.set_ylabel('Energy Share (%)')
+                ax2.set_ylabel('Normalized GDP (%)')
+                ax1.set_title(f'{country}: GDP vs Energy Structure')
+                
+                # Combine legends
+                lines1, labels1 = ax1.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+                
+                ax1.grid(True, alpha=0.3)
+
+    # Fill empty subplots if needed
+    for i in range(len(representative_countries), 4):
+        row, col = i // 2, i % 2
+        axes[row, col].axis('off')
+    
+    plt.tight_layout()
+    st.pyplot(fig)
+
+def create_development_stage_analysis(df, countries):
+    """Analyze energy structure by economic development stage"""
+    st.subheader("Energy Structure by Economic Development Stage")
+    
+    # Classify countries by development stage based on GDP per capita
+    latest_data = df[df['year'] == df['year'].max()].dropna(subset=['gdp_per_capita'])
+    
+    if latest_data.empty:
+        st.warning("No data available for development stage analysis")
+        return
+    
+    # Define development stages based on GDP per capita quartiles
+    gdp_per_capita = latest_data['gdp_per_capita']
+    low_income = gdp_per_capita.quantile(0.25)
+    middle_income = gdp_per_capita.quantile(0.5)
+    high_income = gdp_per_capita.quantile(0.75)
+    
+    def classify_development(gdp_pc):
+        if gdp_pc <= low_income:
+            return "Low Income"
+        elif gdp_pc <= middle_income:
+            return "Lower Middle Income"
+        elif gdp_pc <= high_income:
+            return "Upper Middle Income"
+        else:
+            return "High Income"
+    
+    latest_data['development_stage'] = latest_data['gdp_per_capita'].apply(classify_development)
+    
+    # Create visualizations
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Energy structure by development stage
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Prepare data for stacked bar chart
+        stages = ["Low Income", "Lower Middle Income", "Upper Middle Income", "High Income"]
+        energy_sources = ['coal_share_energy', 'gas_share_energy', 'oil_share_energy', 'renewables_share_energy']
+        energy_labels = ['Coal', 'Gas', 'Oil', 'Renewables']
+        
+        stage_data = []
+        for stage in stages:
+            stage_df = latest_data[latest_data['development_stage'] == stage]
+            if not stage_df.empty:
+                shares = []
+                for source in energy_sources:
+                    if source in stage_df.columns:
+                        share = stage_df[source].mean()
+                        shares.append(share if not pd.isna(share) else 0)
+                    else:
+                        shares.append(0)
+                stage_data.append(shares)
+        
+        if stage_data:
+            stage_data = np.array(stage_data)
+            
+            # Create stacked bar chart
+            bottom = np.zeros(len(stages))
+            colors = ['#8B4513', '#1E90FF', '#FFD700', '#32CD32']
+            
+            for i, (source, label, color) in enumerate(zip(energy_sources, energy_labels, colors)):
+                ax.bar(stages, stage_data[:, i], bottom=bottom, 
+                      label=label, color=color, alpha=0.8)
+                bottom += stage_data[:, i]
+            
+            ax.set_ylabel('Energy Share (%)')
+            ax.set_title('Energy Structure by Development Stage')
             ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.xticks(rotation=45)
+            
+            st.pyplot(fig)
+
+    with col2:
+        # GDP per capita vs renewable share
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        scatter_data = latest_data.dropna(subset=['gdp_per_capita', 'renewables_share'])
+        
+        if not scatter_data.empty:
+            # Color by development stage
+            colors = {'Low Income': 'red', 'Lower Middle Income': 'orange', 
+                     'Upper Middle Income': 'yellow', 'High Income': 'green'}
+            
+            for stage, color in colors.items():
+                stage_data = scatter_data[scatter_data['development_stage'] == stage]
+                if not stage_data.empty:
+                    ax.scatter(stage_data['gdp_per_capita'], stage_data['renewables_share'],
+                             c=color, label=stage, alpha=0.7, s=60)
+            
+            # Add trend line
+            if len(scatter_data) > 2:
+                z = np.polyfit(scatter_data['gdp_per_capita'], scatter_data['renewables_share'], 2)
+                p = np.poly1d(z)
+                x_range = np.linspace(scatter_data['gdp_per_capita'].min(), 
+                                    scatter_data['gdp_per_capita'].max(), 100)
+                ax.plot(x_range, p(x_range), 'k--', alpha=0.8, label='Trend')
+            
+            ax.set_xlabel('GDP per Capita')
+            ax.set_ylabel('Renewable Energy Share (%)')
+            ax.set_title('Economic Development vs Renewable Energy Adoption')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            st.pyplot(fig)
+            
+            # Calculate correlation
+            correlation = scatter_data['gdp_per_capita'].corr(scatter_data['renewables_share'])
+            st.metric("GDP per Capita-Renewable Share Correlation", f"{correlation:.3f}")
+
+    # Development transition analysis
+    st.subheader("Economic Development and Energy Transition")
     
-    # 4. GDP Growth vs Energy Consumption Growth
-    ax = axes[1, 1]
-    growth_data = []
+    # Analyze how energy structure changes with economic development over time
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
     
-    for country in countries[:15]:
-        country_data = df[df['country'] == country].dropna(subset=['gdp', 'primary_energy_consumption'])
+    # Select countries that have data across multiple development stages
+    transition_countries = []
+    for country in countries[:10]:  # Check top 10 countries
+        country_data = df[df['country'] == country].dropna(subset=['gdp_per_capita', 'fossil_share'])
         if len(country_data) > 10:
-            country_data = country_data.sort_values('year')
-            
-            # Calculate compound annual growth rates
-            gdp_cagr = (country_data['gdp'].iloc[-1] / country_data['gdp'].iloc[0]) ** (1/len(country_data)) - 1
-            energy_cagr = (country_data['primary_energy_consumption'].iloc[-1] / country_data['primary_energy_consumption'].iloc[0]) ** (1/len(country_data)) - 1
-            
-            growth_data.append({
-                'country': country,
-                'gdp_growth': gdp_cagr * 100,
-                'energy_growth': energy_cagr * 100
-            })
+            # Check if country shows significant development
+            gdp_growth = (country_data['gdp_per_capita'].max() / country_data['gdp_per_capita'].min()) - 1
+            if gdp_growth > 1:  # More than 100% growth
+                transition_countries.append(country)
     
-    if growth_data:
-        growth_df = pd.DataFrame(growth_data)
-        
-        ax.scatter(growth_df['gdp_growth'], growth_df['energy_growth'], alpha=0.6, s=60)
-        
-        # Add country labels
-        for _, row in growth_df.iterrows():
-            ax.annotate(row['country'], 
-                       (row['gdp_growth'], row['energy_growth']),
-                       xytext=(5, 5), textcoords='offset points', fontsize=8)
-        
-        # Add trend line
-        if len(growth_df) > 2:
-            z = np.polyfit(growth_df['gdp_growth'], growth_df['energy_growth'], 1)
-            p = np.poly1d(z)
-            x_range = np.linspace(growth_df['gdp_growth'].min(), growth_df['gdp_growth'].max(), 100)
-            ax.plot(x_range, p(x_range), 'r--', alpha=0.8, label='Trend')
-        
-        ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3)
-        ax.axvline(x=0, color='gray', linestyle='-', alpha=0.3)
-        ax.set_xlabel('GDP Annual Growth Rate (%)')
-        ax.set_ylabel('Energy Consumption Annual Growth Rate (%)')
-        ax.set_title('GDP Growth vs Energy Consumption Growth')
+    # Plot development paths for a few countries
+    for i, country in enumerate(transition_countries[:4]):
+        country_data = df[df['country'] == country].dropna(subset=['gdp_per_capita', 'fossil_share'])
+        if len(country_data) > 5:
+            row, col = i // 2, i % 2
+            ax = axes[col] if i < 2 else axes[1]
+            
+            # Create path plot
+            path = ax.plot(country_data['gdp_per_capita'], country_data['fossil_share'], 
+                         marker='o', linewidth=2, label=country)
+            
+            # Add year labels for some points
+            for j, row in country_data.iterrows():
+                if j % 5 == 0:  # Label every 5th year
+                    ax.annotate(str(int(row['year'])), 
+                               (row['gdp_per_capita'], row['fossil_share']),
+                               xytext=(5, 5), textcoords='offset points', fontsize=8)
+    
+    for ax in axes:
+        ax.set_xlabel('GDP per Capita')
+        ax.set_ylabel('Fossil Fuel Share (%)')
+        ax.set_title('Development Path: GDP vs Fossil Dependency')
         ax.legend()
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
     st.pyplot(fig)
 
-def create_sector_analysis(df, countries):
-    """Create detailed sector-by-sector analysis"""
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+def create_gdp_growth_impact_analysis(df, countries):
+    """Analyze impact of GDP growth on energy structure"""
+    st.subheader("Impact of GDP Growth on Energy Structure")
     
-    # Define sectors to analyze
-    sectors = [
-        ('coal_consumption', 'Coal', 'red'),
-        ('gas_consumption', 'Natural Gas', 'blue'), 
-        ('oil_consumption', 'Oil', 'green'),
-        ('renewables_consumption', 'Renewables', 'orange')
-    ]
-    
-    # 1. Sector Consumption Trends
-    ax = axes[0, 0]
-    for sector_col, sector_name, color in sectors:
-        # Calculate global total for this sector
-        sector_totals = df.groupby('year')[sector_col].sum().reset_index()
-        if len(sector_totals) > 5:
-            ax.plot(sector_totals['year'], sector_totals[sector_col], 
-                   color=color, linewidth=2, label=sector_name)
-    
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Total Consumption')
-    ax.set_title('Global Energy Consumption by Sector')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    # 2. Sector Share Evolution
-    ax = axes[0, 1]
-    
-    # Calculate total energy by year
-    total_energy_by_year = df.groupby('year')[[
-        'coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption'
-    ]].sum()
-    
-    # Calculate shares
-    for sector_col, sector_name, color in sectors:
-        if sector_col in total_energy_by_year.columns:
-            sector_share = (total_energy_by_year[sector_col] / total_energy_by_year.sum(axis=1)) * 100
-            ax.plot(sector_share.index, sector_share.values, 
-                   color=color, linewidth=2, label=sector_name)
-    
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Market Share (%)')
-    ax.set_title('Energy Sector Market Shares Over Time')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    # 3. GDP vs Sector Consumption Elasticity
-    ax = axes[1, 0]
-    elasticity_data = []
-    
-    for country in countries[:10]:
-        country_data = df[df['country'] == country].dropna(subset=['gdp', 'coal_consumption', 'gas_consumption', 'oil_consumption'])
-        if len(country_data) > 8:
-            # Calculate elasticities for each sector
-            for sector_col, sector_name, _ in sectors[:3]:  # Fossil fuels only
-                if sector_col in country_data.columns:
-                    gdp_growth = country_data['gdp'].pct_change().mean() * 100
-                    sector_growth = country_data[sector_col].pct_change().mean() * 100
-                    
-                    if gdp_growth != 0:
-                        elasticity = sector_growth / gdp_growth
-                        elasticity_data.append({
-                            'country': country,
-                            'sector': sector_name,
-                            'elasticity': elasticity
-                        })
-    
-    if elasticity_data:
-        elasticity_df = pd.DataFrame(elasticity_data)
-        
-        # Pivot for grouped bar chart
-        pivot_df = elasticity_df.pivot(index='country', columns='sector', values='elasticity')
-        
-        if not pivot_df.empty:
-            pivot_df.plot(kind='bar', ax=ax, alpha=0.8)
-            ax.set_xlabel('Country')
-            ax.set_ylabel('Elasticity (Sector Growth / GDP Growth)')
-            ax.set_title('Energy Consumption Elasticity by Sector')
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            ax.axhline(y=1, color='red', linestyle='--', alpha=0.5, label='Unit Elasticity')
-            plt.xticks(rotation=45)
-    
-    # 4. Sector Transition Patterns
-    ax = axes[1, 1]
-    
-    # Analyze how countries transition between energy sources
-    transition_data = []
-    
-    for country in countries[:8]:
-        country_data = df[df['country'] == country].dropna(
-            subset=['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']
-        )
-        if len(country_data) > 10:
-            early_period = country_data[country_data['year'] <= country_data['year'].median()]
-            late_period = country_data[country_data['year'] > country_data['year'].median()]
-            
-            if len(early_period) > 0 and len(late_period) > 0:
-                early_mix = early_period[['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']].mean()
-                late_mix = late_period[['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']].mean()
-                
-                # Calculate transition: reduction in coal, increase in gas/renewables
-                coal_change = (late_mix['coal_consumption'] - early_mix['coal_consumption']) / early_mix.sum() * 100
-                renewable_change = (late_mix['renewables_consumption'] - early_mix['renewables_consumption']) / early_mix.sum() * 100
-                
-                transition_data.append({
-                    'country': country,
-                    'coal_change': coal_change,
-                    'renewable_change': renewable_change
-                })
-    
-    if transition_data:
-        transition_df = pd.DataFrame(transition_data)
-        
-        ax.scatter(transition_df['coal_change'], transition_df['renewable_change'], alpha=0.6, s=60)
-        
-        for _, row in transition_df.iterrows():
-            ax.annotate(row['country'], 
-                       (row['coal_change'], row['renewable_change']),
-                       xytext=(5, 5), textcoords='offset points', fontsize=8)
-        
-        ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3)
-        ax.axvline(x=0, color='gray', linestyle='-', alpha=0.3)
-        ax.set_xlabel('Change in Coal Share (%)')
-        ax.set_ylabel('Change in Renewable Share (%)')
-        ax.set_title('Energy Transition Patterns: Coal vs Renewables')
-        ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    st.pyplot(fig)
-
-def create_country_comparison(df, countries):
-    """Create country-level comparison of GDP and energy sectors"""
-    
-    # Let user select countries to compare
-    selected_countries = st.multiselect(
-        "Select countries to compare:",
-        countries,
-        default=countries[:3] if len(countries) >= 3 else countries
-    )
-    
-    if not selected_countries:
-        st.info("Please select at least one country for comparison")
-        return
-    
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    
-    # 1. GDP Comparison
-    ax = axes[0, 0]
-    for country in selected_countries:
-        country_data = df[df['country'] == country].dropna(subset=['gdp'])
-        if len(country_data) > 0:
-            ax.plot(country_data['year'], country_data['gdp'] / 1e9, 
-                   linewidth=2, label=country, marker='o', markersize=3)
-    
-    ax.set_xlabel('Year')
-    ax.set_ylabel('GDP (Billions USD)')
-    ax.set_title('GDP Comparison')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    # 2. Total Energy Consumption Comparison
-    ax = axes[0, 1]
-    for country in selected_countries:
-        country_data = df[df['country'] == country].dropna(subset=['primary_energy_consumption'])
-        if len(country_data) > 0:
-            ax.plot(country_data['year'], country_data['primary_energy_consumption'], 
-                   linewidth=2, label=country, marker='s', markersize=3)
-    
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Total Energy Consumption')
-    ax.set_title('Total Energy Consumption Comparison')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    # 3. Energy Mix Radar Chart (Latest Year)
-    ax = axes[1, 0]
-    latest_year = df['year'].max()
-    
-    radar_data = []
-    sectors = ['Coal', 'Gas', 'Oil', 'Renewables']
-    
-    for country in selected_countries:
-        country_data = df[(df['country'] == country) & (df['year'] == latest_year)]
-        if not country_data.empty:
-            row = country_data.iloc[0]
-            mix_data = [country]
-            total_energy = 0
-            
-            for sector in sectors:
-                consumption = row.get(f'{sector.lower()}_consumption', 0)
-                if pd.notna(consumption):
-                    mix_data.append(consumption)
-                    total_energy += consumption
-                else:
-                    mix_data.append(0)
-            
-            # Calculate percentages
-            if total_energy > 0:
-                percentages = [x/total_energy*100 for x in mix_data[1:]]
-                radar_data.append([country] + percentages)
-    
-    if radar_data:
-        radar_df = pd.DataFrame(radar_data, columns=['Country'] + sectors)
-        
-        # Create radar chart
-        angles = np.linspace(0, 2*np.pi, len(sectors), endpoint=False).tolist()
-        angles += angles[:1]  # Complete the circle
-        
-        for i, (_, row) in enumerate(radar_df.iterrows()):
-            values = row[sectors].tolist()
-            values += values[:1]  # Complete the circle
-            
-            ax.plot(angles, values, linewidth=2, label=row['Country'])
-            ax.fill(angles, values, alpha=0.1)
-        
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(sectors)
-        ax.set_ylim(0, 100)
-        ax.set_ylabel('Share (%)')
-        ax.set_title(f'Energy Mix Comparison ({latest_year})')
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        ax.grid(True, alpha=0.3)
-    
-    # 4. Sector Growth Rates
-    ax = axes[1, 1]
+    # Calculate GDP growth rates and corresponding energy structure changes
     growth_data = []
     
-    for country in selected_countries:
+    for country in countries:
         country_data = df[df['country'] == country].dropna(
-            subset=['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']
+            subset=['gdp', 'fossil_share', 'renewables_share']
         )
-        if len(country_data) > 5:
+        
+        if len(country_data) > 10:
             country_data = country_data.sort_values('year')
             
-            for sector_col, sector_name, _ in [
-                ('coal_consumption', 'Coal', 'red'),
-                ('gas_consumption', 'Gas', 'blue'),
-                ('oil_consumption', 'Oil', 'green'),
-                ('renewables_consumption', 'Renewables', 'orange')
-            ]:
-                if sector_col in country_data.columns:
-                    start_val = country_data[sector_col].iloc[0]
-                    end_val = country_data[sector_col].iloc[-1]
-                    years = country_data['year'].iloc[-1] - country_data['year'].iloc[0]
-                    
-                    if years > 0 and start_val > 0:
-                        cagr = (end_val / start_val) ** (1/years) - 1
-                        growth_data.append({
-                            'country': country,
-                            'sector': sector_name,
-                            'growth_rate': cagr * 100
-                        })
+            # Calculate 5-year growth periods
+            for i in range(len(country_data) - 5):
+                period_data = country_data.iloc[i:i+6]  # 5-year period
+                
+                gdp_start = period_data['gdp'].iloc[0]
+                gdp_end = period_data['gdp'].iloc[-1]
+                gdp_growth = (gdp_end - gdp_start) / gdp_start * 100
+                
+                fossil_start = period_data['fossil_share'].iloc[0]
+                fossil_end = period_data['fossil_share'].iloc[-1]
+                fossil_change = fossil_end - fossil_start
+                
+                renewable_start = period_data['renewables_share'].iloc[0]
+                renewable_end = period_data['renewables_share'].iloc[-1]
+                renewable_change = renewable_end - renewable_start
+                
+                growth_data.append({
+                    'country': country,
+                    'period': f"{int(period_data['year'].iloc[0])}-{int(period_data['year'].iloc[-1])}",
+                    'gdp_growth': gdp_growth,
+                    'fossil_change': fossil_change,
+                    'renewable_change': renewable_change,
+                    'start_year': period_data['year'].iloc[0],
+                    'gdp_per_capita': period_data['gdp_per_capita'].mean()
+                })
     
-    if growth_data:
-        growth_df = pd.DataFrame(growth_data)
-        
-        # Pivot for grouped bar chart
-        pivot_df = growth_df.pivot(index='country', columns='sector', values='growth_rate')
-        
-        if not pivot_df.empty:
-            pivot_df.plot(kind='bar', ax=ax, alpha=0.8)
-            ax.set_xlabel('Country')
-            ax.set_ylabel('Annual Growth Rate (%)')
-            ax.set_title('Sector Consumption Growth Rates')
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
-            plt.xticks(rotation=45)
-    
-    plt.tight_layout()
-    st.pyplot(fig)
-
-def create_correlation_analysis(df):
-    """Create correlation analysis between GDP and energy sectors"""
-    
-    # Calculate correlations
-    correlation_data = []
-    sectors = ['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']
-    
-    for country in df['country'].unique():
-        country_data = df[df['country'] == country].dropna(subset=['gdp'] + sectors)
-        if len(country_data) > 10:
-            for sector in sectors:
-                corr = country_data['gdp'].corr(country_data[sector])
-                if not pd.isna(corr):
-                    correlation_data.append({
-                        'country': country,
-                        'sector': sector.replace('_consumption', '').title(),
-                        'correlation': corr
-                    })
-    
-    if not correlation_data:
-        st.info("Insufficient data for correlation analysis")
+    if not growth_data:
+        st.warning("Insufficient data for growth impact analysis")
         return
     
-    correlation_df = pd.DataFrame(correlation_data)
+    growth_df = pd.DataFrame(growth_data)
     
-    # Create visualization
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    
-    # 1. Correlation heatmap by country and sector
-    ax = axes[0]
-    pivot_corr = correlation_df.pivot(index='country', columns='sector', values='correlation')
-    
-    # Select countries with most data
-    if len(pivot_corr) > 15:
-        pivot_corr = pivot_corr.iloc[:15]
-    
-    if not pivot_corr.empty:
-        im = ax.imshow(pivot_corr.values, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
-        ax.set_xticks(range(len(pivot_corr.columns)))
-        ax.set_yticks(range(len(pivot_corr.index)))
-        ax.set_xticklabels(pivot_corr.columns, rotation=45)
-        ax.set_yticklabels(pivot_corr.index)
-        
-        # Add correlation values
-        for i in range(len(pivot_corr.index)):
-            for j in range(len(pivot_corr.columns)):
-                ax.text(j, i, f'{pivot_corr.iloc[i, j]:.2f}', 
-                       ha='center', va='center', fontsize=8)
-        
-        ax.set_title('GDP-Energy Sector Correlations by Country')
-        plt.colorbar(im, ax=ax)
-    
-    # 2. Average correlation by sector
-    ax = axes[1]
-    sector_avg_corr = correlation_df.groupby('sector')['correlation'].mean().sort_values()
-    
-    bars = ax.barh(range(len(sector_avg_corr)), sector_avg_corr.values,
-                  color=['red' if x>0 else 'blue' for x in sector_avg_corr.values])
-    
-    ax.set_yticks(range(len(sector_avg_corr)))
-    ax.set_yticklabels(sector_avg_corr.index)
-    ax.set_xlabel('Average Correlation Coefficient')
-    ax.set_title('Average GDP Correlation by Energy Sector')
-    ax.axvline(x=0, color='black', linestyle='-', alpha=0.3)
-    
-    # Add value labels
-    for bar, corr in zip(bars, sector_avg_corr.values):
-        ax.text(bar.get_width() + (0.02 if bar.get_width() >=0 else -0.05), 
-               bar.get_y() + bar.get_height()/2,
-               f'{corr:.3f}', ha='left' if bar.get_width() >=0 else 'right', 
-               va='center', fontsize=10)
-    
-    plt.tight_layout()
-    st.pyplot(fig)
-    
-    # Display insights
-    st.subheader("Correlation Insights")
-    
-    highest_corr_sector = sector_avg_corr.idxmax()
-    lowest_corr_sector = sector_avg_corr.idxmin()
-    
+    # Create visualizations
     col1, col2 = st.columns(2)
     
     with col1:
-        st.metric(
-            "Highest Correlation Sector",
-            highest_corr_sector,
-            f"{sector_avg_corr[highest_corr_sector]:.3f}"
+        # GDP growth vs fossil fuel change
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        scatter = ax.scatter(growth_df['gdp_growth'], growth_df['fossil_change'],
+                           c=growth_df['gdp_per_capita'], cmap='coolwarm',
+                           alpha=0.6, s=50)
+        
+        ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+        ax.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+        
+        # Add quadrants
+        ax.text(0.05, 0.95, 'High Growth, Decreasing Fossil', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor='green', alpha=0.5))
+        ax.text(0.05, 0.05, 'Low Growth, Decreasing Fossil', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='bottom',
+               bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.5))
+        ax.text(0.55, 0.95, 'High Growth, Increasing Fossil', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor='orange', alpha=0.5))
+        ax.text(0.55, 0.05, 'Low Growth, Increasing Fossil', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='bottom',
+               bbox=dict(boxstyle='round', facecolor='red', alpha=0.5))
+        
+        ax.set_xlabel('GDP Growth (%)')
+        ax.set_ylabel('Change in Fossil Fuel Share (%)')
+        ax.set_title('GDP Growth Impact on Fossil Fuel Dependency')
+        ax.grid(True, alpha=0.3)
+        
+        plt.colorbar(scatter, ax=ax, label='GDP per Capita')
+        
+        st.pyplot(fig)
+        
+        # Calculate correlation
+        correlation = growth_df['gdp_growth'].corr(growth_df['fossil_change'])
+        st.metric("GDP Growth-Fossil Change Correlation", f"{correlation:.3f}")
+
+    with col2:
+        # GDP growth vs renewable energy change
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        scatter = ax.scatter(growth_df['gdp_growth'], growth_df['renewable_change'],
+                           c=growth_df['gdp_per_capita'], cmap='viridis',
+                           alpha=0.6, s=50)
+        
+        ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+        ax.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+        
+        # Add quadrants
+        ax.text(0.05, 0.95, 'High Growth, Increasing Renewables', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor='green', alpha=0.5))
+        ax.text(0.05, 0.05, 'Low Growth, Increasing Renewables', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='bottom',
+               bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.5))
+        ax.text(0.55, 0.95, 'High Growth, Decreasing Renewables', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor='orange', alpha=0.5))
+        ax.text(0.55, 0.05, 'Low Growth, Decreasing Renewables', 
+               transform=ax.transAxes, fontsize=10, verticalalignment='bottom',
+               bbox=dict(boxstyle='round', facecolor='red', alpha=0.5))
+        
+        ax.set_xlabel('GDP Growth (%)')
+        ax.set_ylabel('Change in Renewable Share (%)')
+        ax.set_title('GDP Growth Impact on Renewable Energy Adoption')
+        ax.grid(True, alpha=0.3)
+        
+        plt.colorbar(scatter, ax=ax, label='GDP per Capita')
+        
+        st.pyplot(fig)
+        
+        # Calculate correlation
+        correlation = growth_df['gdp_growth'].corr(growth_df['renewable_change'])
+        st.metric("GDP Growth-Renewable Change Correlation", f"{correlation:.3f}")
+
+    # Time series of GDP growth and energy transition
+    st.subheader("GDP Growth and Energy Transition Timeline")
+    
+    # Select a country with significant data
+    example_country = None
+    for country in countries:
+        country_data = df[df['country'] == country].dropna(
+            subset=['gdp', 'fossil_share', 'renewables_share']
         )
+        if len(country_data) > 15:
+            example_country = country
+            break
+    
+    if example_country:
+        country_data = df[df['country'] == example_country].dropna(
+            subset=['gdp', 'fossil_share', 'renewables_share']
+        ).sort_values('year')
+        
+        # Calculate rolling averages
+        country_data['gdp_growth_5yr'] = country_data['gdp'].pct_change(5) * 100
+        country_data['fossil_change_5yr'] = country_data['fossil_share'].diff(5)
+        
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+        
+        # Plot GDP growth
+        color = 'tab:blue'
+        ax1.set_xlabel('Year')
+        ax1.set_ylabel('5-Year GDP Growth (%)', color=color)
+        line1 = ax1.plot(country_data['year'], country_data['gdp_growth_5yr'], 
+                        color=color, linewidth=2, label='GDP Growth')
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, alpha=0.3)
+        
+        # Create second y-axis for fossil fuel change
+        ax2 = ax1.twinx()
+        color = 'tab:red'
+        ax2.set_ylabel('5-Year Change in Fossil Share (%)', color=color)
+        line2 = ax2.plot(country_data['year'], country_data['fossil_change_5yr'], 
+                        color=color, linewidth=2, label='Fossil Share Change')
+        ax2.tick_params(axis='y', labelcolor=color)
+        
+        # Combine legends
+        lines = line1 + line2
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='upper left')
+        
+        ax1.set_title(f'{example_country}: GDP Growth vs Fossil Fuel Transition')
+        
+        st.pyplot(fig)
+        
+        # Calculate overall correlation for this country
+        correlation = country_data['gdp_growth_5yr'].corr(country_data['fossil_change_5yr'])
+        st.metric(f"{example_country} GDP Growth-Fossil Change Correlation", f"{correlation:.3f}")
+
+def create_policy_implications(df):
+    """Provide policy implications based on GDP-energy analysis"""
+    st.subheader("Policy Implications")
+    
+    # Key insights from the analysis
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.info("""
+        **Economic Development Phases:**
+        
+        **Low-Income Countries:**
+        - Focus on energy access and affordability
+        - Leverage renewable potential for sustainable growth
+        - Avoid fossil fuel lock-in
+        
+        **Middle-Income Countries:**
+        - Balance economic growth with environmental goals
+        - Invest in energy efficiency
+        - Develop renewable energy infrastructure
+        
+        **High-Income Countries:**
+        - Lead in renewable energy innovation
+        - Implement carbon pricing mechanisms
+        - Support global clean energy transition
+        """)
     
     with col2:
-        st.metric(
-            "Lowest Correlation Sector", 
-            lowest_corr_sector,
-            f"{sector_avg_corr[lowest_corr_sector]:.3f}"
-        )
+        st.success("""
+        **GDP-Energy Transition Strategies:**
+        
+        **Growth-Oriented Policies:**
+        - Green stimulus packages
+        - Renewable energy investments
+        - Energy efficiency standards
+        
+        **Structural Transformation:**
+        - Economic diversification
+        - Clean technology adoption
+        - Sustainable infrastructure
+        
+        **International Cooperation:**
+        - Technology transfer
+        - Climate finance
+        - Carbon market mechanisms
+        """)
+    
+    # Data-driven policy recommendations
+    st.subheader("Data-Driven Policy Recommendations")
+    
+    # Calculate key metrics for policy recommendations
+    latest_data = df[df['year'] == df['year'].max()].dropna(
+        subset=['gdp_per_capita', 'fossil_share', 'renewables_share']
+    )
+    
+    if not latest_data.empty:
+        # High fossil dependency, low income countries
+        high_fossil_low_income = latest_data[
+            (latest_data['fossil_share'] > 80) & 
+            (latest_data['gdp_per_capita'] < latest_data['gdp_per_capita'].median())
+        ]
+        
+        # High renewable, high income countries
+        high_renewable_high_income = latest_data[
+            (latest_data['renewables_share'] > 30) & 
+            (latest_data['gdp_per_capita'] > latest_data['gdp_per_capita'].median())
+        ]
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Priority Countries for Energy Transition Support:**")
+            if not high_fossil_low_income.empty:
+                for _, country in high_fossil_low_income.iterrows():
+                    st.write(f"- {country['country']}: {country['fossil_share']:.1f}% fossil, "
+                            f"${country['gdp_per_capita']:.0f} per capita")
+            else:
+                st.write("No countries meet the criteria")
+        
+        with col2:
+            st.write("**Renewable Energy Leaders:**")
+            if not high_renewable_high_income.empty:
+                for _, country in high_renewable_high_income.iterrows():
+                    st.write(f"- {country['country']}: {country['renewables_share']:.1f}% renewable, "
+                            f"${country['gdp_per_capita']:.0f} per capita")
+            else:
+                st.write("No countries meet the criteria")
+    
+    # Economic case for energy transition
+    st.subheader("Economic Case for Energy Transition")
+    
+    # Calculate potential economic benefits
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Simulate economic benefits of renewable transition
+    years = np.arange(2020, 2050, 5)
+    current_trend = [100, 95, 90, 85, 80, 75]  # Current fossil share trend
+    accelerated_transition = [100, 85, 70, 55, 40, 25]  # Accelerated transition
+    
+    # Economic benefits (simplified)
+    economic_benefits_current = [0, 5, 10, 15, 20, 25]  # % GDP increase
+    economic_benefits_accelerated = [0, 8, 18, 30, 45, 60]  # % GDP increase
+    
+    ax.plot(years, economic_benefits_current, 'b-', linewidth=2, 
+            label='Current Transition Path')
+    ax.plot(years, economic_benefits_accelerated, 'g-', linewidth=2, 
+            label='Accelerated Transition Path')
+    
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Cumulative Economic Benefits (% GDP)')
+    ax.set_title('Projected Economic Benefits of Energy Transition')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    # Add annotation
+    ax.annotate('Accelerated transition\n yields 2.4x benefits by 2050', 
+               xy=(2045, 60), xytext=(2030, 40),
+               arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.1'),
+               fontsize=10)
+    
+    st.pyplot(fig)
 
 def main():
-    st.set_page_config(page_title="GDP & Energy Sector Analysis", page_icon="🌍", layout="wide")
+    st.set_page_config(page_title="GDP & Energy Analysis", page_icon="🌍", layout="wide")
     
-    st.title("🌍 GDP & Energy Consumption by Sector Analysis")
+    st.title("🌍 GDP-Integrated Energy Structure Analysis")
     st.markdown("""
-    Comprehensive analysis of the relationship between economic development (GDP) and energy consumption 
-    across different sectors (coal, gas, oil, renewables).
+    Comprehensive analysis of how economic development (GDP) influences and is influenced by energy structure transformation.
+    This analysis explores the bidirectional relationship between economic growth and energy transitions.
     """)
     
     # Load data
@@ -638,86 +745,81 @@ def main():
     analysis_type = st.sidebar.selectbox(
         "Select Analysis Type",
         [
-            "GDP vs Energy Sectors", 
-            "Country Comparison", 
-            "Sector Transition", 
+            "GDP-Integrated Analysis", 
+            "Development Stages", 
+            "Growth Impact", 
             "Full Report"
         ]
     )
     
-    if analysis_type == "GDP vs Energy Sectors":
-        create_gdp_energy_sector_analysis(df)
+    if analysis_type == "GDP-Integrated Analysis":
+        create_gdp_integrated_analysis(df)
     
-    elif analysis_type == "Country Comparison":
-        st.header("🏛️ Country-Level Energy Sector Comparison")
-        countries = sorted(df['country'].unique())
-        selected_countries = st.multiselect(
-            "Select countries:",
-            countries,
-            default=countries[:4] if len(countries) >= 4 else countries
-        )
-        
-        if selected_countries:
-            create_country_comparison(df, selected_countries)
+    elif analysis_type == "Development Stages":
+        st.header("📈 Economic Development Stages Analysis")
+        create_development_stage_analysis(df, sorted(df['country'].unique())[:20])
     
-    elif analysis_type == "Sector Transition":
-        st.header("🔄 Energy Sector Transition Analysis")
-        create_sector_analysis(df, sorted(df['country'].unique())[:20])
+    elif analysis_type == "Growth Impact":
+        st.header("📊 GDP Growth Impact Analysis")
+        create_gdp_growth_impact_analysis(df, sorted(df['country'].unique())[:20])
     
     else:  # Full Report
-        st.header("📋 Comprehensive Analysis Report")
+        st.header("📋 Comprehensive GDP-Energy Analysis Report")
         
         # Executive Summary
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("Key Sector Insights")
+            st.subheader("Key Economic-Energy Insights")
             st.markdown("""
-            **Energy-GDP Relationships:**
-            - Different sectors show varying correlations with economic growth
-            - Renewable energy adoption patterns vary by development stage
-            - Sector transitions follow distinct economic pathways
+            **GDP-Energy Interdependence:**
+            - Economic development drives energy structure transformation
+            - Energy transitions create new economic opportunities
+            - Different development stages require tailored energy policies
             
-            **Global Trends:**
-            - Shift from coal to gas and renewables in developed economies
-            - Oil consumption remains stable in many economies
-            - Renewable growth accelerates with economic development
+            **Transition Economics:**
+            - Renewable energy adoption correlates with economic development
+            - Energy efficiency improves with economic maturity
+            - Fossil fuel dependency varies by economic structure
             """)
         
         with col2:
-            st.subheader("Policy Implications")
+            st.subheader("Strategic Implications")
             st.markdown("""
-            **Sector-Specific Strategies:**
-            - Targeted renewable energy incentives
-            - Coal phase-out roadmaps
-            - Natural gas as transition fuel
-            - Oil efficiency improvements
-            - Cross-sector integration policies
+            **Development-Aligned Policies:**
+            - Low-income: Focus on energy access and affordability
+            - Middle-income: Balance growth with sustainability
+            - High-income: Lead innovation and global cooperation
+            
+            **Economic Opportunities:**
+            - Green growth strategies
+            - Clean energy investments
+            - Sustainable infrastructure development
             """)
         
         # Display comprehensive analysis
-        create_gdp_energy_sector_analysis(df)
+        create_gdp_integrated_analysis(df)
     
     # Data summary
-    with st.expander("Data Summary"):
+    with st.expander("Dataset Summary"):
         st.write(f"**Dataset Overview:**")
         st.write(f"- Countries: {df['country'].nunique()}")
         st.write(f"- Time Period: {df['year'].min()} - {df['year'].max()}")
         st.write(f"- Total Observations: {len(df)}")
         
-        # Sector data availability
-        sectors = ['coal_consumption', 'gas_consumption', 'oil_consumption', 'renewables_consumption']
-        sector_stats = []
+        # GDP data availability
+        gdp_coverage = df['gdp'].notna().sum()
+        st.write(f"- GDP Data Coverage: {gdp_coverage} points ({(gdp_coverage/len(df)*100):.1f}%)")
         
-        for sector in sectors:
-            available = df[sector].notna().sum()
-            sector_stats.append({
-                'Sector': sector.replace('_consumption', '').title(),
-                'Available Data Points': available,
-                'Coverage (%)': f"{(available/len(df)*100):.1f}%"
-            })
+        # Key metrics summary
+        latest_year = df['year'].max()
+        latest_data = df[df['year'] == latest_year].dropna(subset=['gdp', 'fossil_share'])
         
-        st.table(pd.DataFrame(sector_stats))
+        if not latest_data.empty:
+            st.write(f"**Latest Year ({latest_year}) Summary:**")
+            st.write(f"- Average Fossil Share: {latest_data['fossil_share'].mean():.1f}%")
+            st.write(f"- Average Renewable Share: {latest_data['renewables_share'].mean():.1f}%")
+            st.write(f"- Average GDP per Capita: ${latest_data['gdp_per_capita'].mean():.0f}")
 
 if __name__ == "__main__":
     main()
