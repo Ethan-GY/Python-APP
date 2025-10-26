@@ -7,7 +7,7 @@ def install_from_requirements():
     if os.path.exists(requirements_file):
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
-            print("Suceess")
+            print("Success")
         except subprocess.CalledProcessError as e:
             print(f"Failure: {e}")
 
@@ -39,16 +39,24 @@ def load_and_preprocess_data():
         st.sidebar.write(f"Countries: {df['country'].nunique()}")
         st.sidebar.write(f"Years: {df['year'].min()} - {df['year'].max()}")
         
-        # Filter countries with sufficient GDP data
+        # Define key countries we want to include regardless of data completeness
+        key_countries = [
+            'United States', 'China', 'India', 'Japan', 'Germany', 'United Kingdom',
+            'France', 'Brazil', 'Canada', 'Russia', 'Australia', 'South Korea',
+            'Mexico', 'Indonesia', 'Saudi Arabia', 'Turkey', 'Italy', 'Spain',
+            'Argentina', 'South Africa', 'Nigeria', 'Egypt', 'Thailand', 'Vietnam'
+        ]
+        
+        # Filter countries with sufficient GDP data OR are key countries
         countries_with_gdp = df.groupby('country')['gdp'].count()
-        valid_countries = countries_with_gdp[countries_with_gdp >= 10].index.tolist()
+        valid_countries_by_gdp = countries_with_gdp[countries_with_gdp >= 5].index.tolist()
         
         # Also include countries with good energy data even if GDP is limited
         energy_countries = df.groupby('country')['fossil_share_energy'].count()
-        energy_valid = energy_countries[energy_countries >= 15].index.tolist()
+        energy_valid = energy_countries[energy_countries >= 10].index.tolist()
         
-        # Combine and get unique countries
-        all_valid_countries = list(set(valid_countries + energy_valid))
+        # Combine all criteria and ensure key countries are included
+        all_valid_countries = list(set(valid_countries_by_gdp + energy_valid + key_countries))
         
         # Filter dataset
         df_filtered = df[df['country'].isin(all_valid_countries)].copy()
@@ -57,7 +65,9 @@ def load_and_preprocess_data():
         numeric_columns = ['gdp', 'population', 'fossil_share_energy', 'renewables_share_energy', 
                          'coal_share_energy', 'gas_share_energy', 'oil_share_energy',
                          'coal_consumption', 'gas_consumption', 'oil_consumption',
-                         'renewables_consumption', 'primary_energy_consumption']
+                         'renewables_consumption', 'primary_energy_consumption',
+                         'hydro_consumption', 'solar_consumption', 'wind_consumption',
+                         'nuclear_consumption', 'biofuel_consumption']
         
         for col in numeric_columns:
             if col in df_filtered.columns:
@@ -73,6 +83,9 @@ def load_and_preprocess_data():
         # Calculate energy intensity (energy consumption per GDP)
         df_filtered['energy_intensity'] = df_filtered['primary_energy_consumption'] / (df_filtered['gdp'] / 1e9)  # GDP in billions
         
+        # Add GDP per capita
+        df_filtered['gdp_per_capita'] = df_filtered['gdp'] / df_filtered['population']
+        
         return df_filtered
         
     except Exception as e:
@@ -83,13 +96,22 @@ def create_comprehensive_trends(df):
     """Create comprehensive trend analysis with multiple countries"""
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     
-    # Get top countries by data availability
+    # Get top countries by data availability and importance
     country_counts = df.groupby('country').size().sort_values(ascending=False)
-    top_countries = country_counts.head(15).index.tolist()
+    
+    # Ensure major economies are included
+    major_economies = ['United States', 'China', 'Japan', 'Germany', 'United Kingdom', 
+                      'France', 'India', 'Brazil', 'Canada', 'Russia', 'Australia']
+    
+    # Combine major economies with other top countries
+    top_countries = list(set(major_economies + country_counts.head(20).index.tolist()))
     
     # 1. GDP Growth vs Fossil Fuel Share
     ax = axes[0, 0]
-    for country in top_countries[:8]:  # Limit to 8 for readability
+    plotted_countries = 0
+    for country in top_countries:
+        if plotted_countries >= 8:  # Limit to 8 for readability
+            break
         country_data = df[df['country'] == country].dropna(subset=['gdp', 'fossil_share'])
         if len(country_data) > 5:
             # Normalize GDP for better comparison
@@ -101,6 +123,7 @@ def create_comprehensive_trends(df):
                        label=f'{country} - GDP', linewidth=2, alpha=0.8)
                 ax.plot(country_data['year'], country_data['fossil_share'], 
                        label=f'{country} - Fossil %', linewidth=2, linestyle='--', alpha=0.8)
+                plotted_countries += 1
     
     ax.set_xlabel('Year')
     ax.set_ylabel('Normalized Values (%)')
@@ -133,11 +156,15 @@ def create_comprehensive_trends(df):
     
     # 3. Renewable Energy Adoption
     ax = axes[1, 0]
-    for country in top_countries[:10]:
+    plotted_countries = 0
+    for country in top_countries:
+        if plotted_countries >= 10:  # Limit to 10 for readability
+            break
         country_data = df[df['country'] == country].dropna(subset=['year', 'renewables_share'])
         if len(country_data) > 5:
             ax.plot(country_data['year'], country_data['renewables_share'], 
                    marker='o', markersize=3, linewidth=2, label=country)
+            plotted_countries += 1
     
     ax.set_xlabel('Year')
     ax.set_ylabel('Renewable Energy Share (%)')
@@ -153,8 +180,12 @@ def create_comprehensive_trends(df):
     )
     
     if not latest_data.empty:
-        # Select top 10 countries by GDP
-        latest_data = latest_data.nlargest(10, 'gdp')
+        # Select top countries by GDP, ensuring major economies are included
+        major_economies_data = latest_data[latest_data['country'].isin(major_economies)]
+        other_data = latest_data[~latest_data['country'].isin(major_economies)].nlargest(5, 'gdp')
+        
+        latest_data = pd.concat([major_economies_data, other_data]).drop_duplicates()
+        latest_data = latest_data.nlargest(10, 'gdp')  # Final selection of top 10
         
         categories = ['Coal', 'Gas', 'Oil', 'Renewables']
         bottom = np.zeros(len(latest_data))
@@ -182,8 +213,16 @@ def create_correlation_analysis(df):
     
     # 1. GDP vs Energy Metrics Correlation Matrix
     ax = axes[0, 0]
-    correlation_data = df[['gdp', 'fossil_share', 'renewables_share', 
-                         'coal_share_energy', 'gas_share_energy', 'oil_share_energy']].corr()
+    
+    # Select relevant columns for correlation
+    correlation_columns = ['gdp', 'fossil_share', 'renewables_share']
+    available_columns = [col for col in correlation_columns if col in df.columns]
+    
+    # Add sector shares if available
+    sector_columns = ['coal_share_energy', 'gas_share_energy', 'oil_share_energy']
+    available_sectors = [col for col in sector_columns if col in df.columns]
+    
+    correlation_data = df[available_columns + available_sectors].corr()
     
     im = ax.imshow(correlation_data, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
     ax.set_xticks(range(len(correlation_data.columns)))
@@ -207,31 +246,45 @@ def create_correlation_analysis(df):
     
     for country in df['country'].unique():
         country_data = df[df['country'] == country].dropna(subset=['gdp', 'fossil_share'])
-        if len(country_data) > 10:  # Require minimum data points
+        if len(country_data) > 8:  # Reduced minimum data points requirement
             corr = country_data['gdp'].corr(country_data['fossil_share'])
             if not pd.isna(corr):
                 correlations.append(corr)
                 countries.append(country)
     
     # Sort by correlation strength
-    sorted_data = sorted(zip(correlations, countries), key=lambda x: abs(x[0]), reverse=True)
-    correlations, countries = zip(*sorted_data[:15])  # Top 15
-    
-    bars = ax.barh(countries, correlations, 
-                  color=['red' if x>0 else 'blue' for x in correlations])
-    ax.axvline(x=0, color='black', linestyle='-', alpha=0.3)
-    ax.set_xlabel('Correlation Coefficient')
-    ax.set_title('GDP vs Fossil Fuel Share Correlation by Country')
-    
-    # Add value labels
-    for bar, corr in zip(bars, correlations):
-        width = bar.get_width()
-        ax.text(width + (0.01 if width >=0 else -0.03), bar.get_y() + bar.get_height()/2,
-               f'{corr:.3f}', ha='left' if width >=0 else 'right', va='center', fontsize=8)
+    if correlations:
+        sorted_data = sorted(zip(correlations, countries), key=lambda x: abs(x[0]), reverse=True)
+        correlations, countries = zip(*sorted_data[:15])  # Top 15
+        
+        bars = ax.barh(countries, correlations, 
+                      color=['red' if x>0 else 'blue' for x in correlations])
+        ax.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+        ax.set_xlabel('Correlation Coefficient')
+        ax.set_title('GDP vs Fossil Fuel Share Correlation by Country')
+        
+        # Add value labels
+        for bar, corr in zip(bars, correlations):
+            width = bar.get_width()
+            ax.text(width + (0.01 if width >=0 else -0.03), bar.get_y() + bar.get_height()/2,
+                   f'{corr:.3f}', ha='left' if width >=0 else 'right', va='center', fontsize=8)
+    else:
+        ax.text(0.5, 0.5, 'Insufficient data for correlation analysis', 
+               ha='center', va='center', transform=ax.transAxes)
+        ax.set_title('GDP vs Fossil Fuel Share Correlation by Country')
     
     # 3. Energy Intensity Analysis
     ax = axes[1, 0]
-    for country in list(countries)[:8]:  # Use countries from previous analysis
+    
+    # Get countries for energy intensity analysis
+    intensity_countries = []
+    for country in df['country'].unique():
+        country_data = df[df['country'] == country].dropna(subset=['gdp', 'primary_energy_consumption'])
+        if len(country_data) > 5:
+            intensity_countries.append(country)
+    
+    # Plot for top countries
+    for country in intensity_countries[:8]:
         country_data = df[df['country'] == country].dropna(subset=['gdp', 'primary_energy_consumption'])
         if len(country_data) > 5:
             # Calculate energy intensity if not already calculated
@@ -256,11 +309,15 @@ def create_correlation_analysis(df):
         ax.scatter(np.log10(latest_data['gdp']), latest_data['renewables_share'], 
                  alpha=0.6, s=50)
         
-        # Add country labels for outliers or interesting cases
-        for _, row in latest_data.nlargest(5, 'renewables_share').iterrows():
-            ax.annotate(row['country'], 
-                       (np.log10(row['gdp']), row['renewables_share']),
-                       xytext=(5, 5), textcoords='offset points', fontsize=8)
+        # Add country labels for major economies and outliers
+        major_economies = ['United States', 'China', 'Japan', 'Germany', 'United Kingdom', 
+                          'France', 'India', 'Brazil', 'Canada', 'Russia']
+        
+        for _, row in latest_data.iterrows():
+            if row['country'] in major_economies or row['renewables_share'] > 50:
+                ax.annotate(row['country'], 
+                           (np.log10(row['gdp']), row['renewables_share']),
+                           xytext=(5, 5), textcoords='offset points', fontsize=8)
         
         # Add trend line
         x_log = np.log10(latest_data['gdp'].dropna())
@@ -276,6 +333,10 @@ def create_correlation_analysis(df):
         ax.set_title('Economic Development vs Renewable Energy (Latest Year)')
         ax.legend()
         ax.grid(True, alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, 'No data available for latest year', 
+               ha='center', va='center', transform=ax.transAxes)
+        ax.set_title('Economic Development vs Renewable Energy (Latest Year)')
     
     plt.tight_layout()
     return fig
@@ -287,26 +348,54 @@ def create_advanced_analysis(df):
     # 1. Energy Transition Pathways
     ax = axes[0, 0]
     
-    # Classify countries by development stage (simplified)
-    latest_gdp = df[df['year'] == df['year'].max()][['country', 'gdp']].dropna()
-    latest_gdp = latest_gdp.groupby('country')['gdp'].mean()
+    # Classify countries by development stage using GDP per capita
+    latest_data = df[df['year'] == df['year'].max()].dropna(subset=['gdp'])
+    if not latest_data.empty:
+        latest_gdp = latest_data.groupby('country')['gdp'].mean()
+        
+        high_income_threshold = latest_gdp.quantile(0.75)
+        low_income_threshold = latest_gdp.quantile(0.25)
+        
+        high_income = latest_gdp[latest_gdp > high_income_threshold].index.tolist()
+        low_income = latest_gdp[latest_gdp < low_income_threshold].index.tolist()
+        
+        # Ensure major economies are represented
+        major_high_income = ['United States', 'Japan', 'Germany', 'United Kingdom', 'France', 'Canada', 'Australia']
+        major_low_income = ['India', 'Indonesia', 'Vietnam']
+        
+        high_income = list(set(high_income + [c for c in major_high_income if c in df['country'].unique()]))
+        low_income = list(set(low_income + [c for c in major_low_income if c in df['country'].unique()]))
+        
+        for i, (countries, label) in enumerate([(high_income, 'High Income'), 
+                                              (low_income, 'Low Income')]):
+            plotted = 0
+            for country in countries:
+                if plotted >= 5:  # Limit to 5 per category
+                    break
+                country_data = df[df['country'] == country].dropna(subset=['year', 'fossil_share'])
+                if len(country_data) > 10:
+                    ax.plot(country_data['year'], country_data['fossil_share'], 
+                           color='red' if i == 0 else 'blue', 
+                           alpha=0.6, linewidth=2, label=f'{country} ({label})')
+                    plotted += 1
+    else:
+        ax.text(0.5, 0.5, 'No data available for classification', 
+               ha='center', va='center', transform=ax.transAxes)
     
-    high_income = latest_gdp[latest_gdp > latest_gdp.quantile(0.75)].index.tolist()
-    low_income = latest_gdp[latest_gdp < latest_gdp.quantile(0.25)].index.tolist()
-    
-    for i, (countries, label) in enumerate([(high_income, 'High Income'), 
-                                          (low_income, 'Low Income')]):
-        for country in countries[:5]:  # Show 5 from each group
-            country_data = df[df['country'] == country].dropna(subset=['year', 'fossil_share'])
-            if len(country_data) > 10:
-                ax.plot(country_data['year'], country_data['fossil_share'], 
-                       color='red' if i == 0 else 'blue', 
-                       alpha=0.6, linewidth=2, label=f'{country} ({label})')
-    
-    # Add average lines
+    # Add average lines if possible
     years = sorted(df['year'].unique())
-    avg_fossil = [df[df['year'] == y]['fossil_share'].mean() for y in years]
-    ax.plot(years, avg_fossil, 'k--', linewidth=3, label='Global Average', alpha=0.8)
+    if years:
+        avg_fossil = []
+        for y in years:
+            year_data = df[df['year'] == y]['fossil_share'].dropna()
+            if len(year_data) > 0:
+                avg_fossil.append(year_data.mean())
+            else:
+                avg_fossil.append(np.nan)
+        
+        # Only plot if we have valid data
+        if not all(np.isnan(avg_fossil)):
+            ax.plot(years, avg_fossil, 'k--', linewidth=3, label='Global Average', alpha=0.8)
     
     ax.set_xlabel('Year')
     ax.set_ylabel('Fossil Fuel Share (%)')
@@ -320,18 +409,20 @@ def create_advanced_analysis(df):
     
     for country in df['country'].unique():
         country_data = df[df['country'] == country].dropna(subset=['gdp', 'primary_energy_consumption'])
-        if len(country_data) > 10:
+        if len(country_data) > 8:  # Reduced minimum requirement
             # Calculate growth rates
             country_data = country_data.sort_values('year')
             gdp_growth = country_data['gdp'].pct_change().mean() * 100
             energy_growth = country_data['primary_energy_consumption'].pct_change().mean() * 100
             
-            decoupling_data.append({
-                'country': country,
-                'gdp_growth': gdp_growth,
-                'energy_growth': energy_growth,
-                'decoupling': gdp_growth - energy_growth
-            })
+            # Only include if we have valid growth rates
+            if not (pd.isna(gdp_growth) or pd.isna(energy_growth)):
+                decoupling_data.append({
+                    'country': country,
+                    'gdp_growth': gdp_growth,
+                    'energy_growth': energy_growth,
+                    'decoupling': gdp_growth - energy_growth
+                })
     
     if decoupling_data:
         decoupling_df = pd.DataFrame(decoupling_data)
@@ -350,6 +441,10 @@ def create_advanced_analysis(df):
         for bar, value in zip(bars, decoupling_df['decoupling']):
             ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
                    f'{value:.1f}%', ha='left', va='center', fontsize=8)
+    else:
+        ax.text(0.5, 0.5, 'Insufficient data for decoupling analysis', 
+               ha='center', va='center', transform=ax.transAxes)
+        ax.set_title('Top Countries by Economic-Energy Decoupling')
     
     # 3. Renewable Energy Growth Rates
     ax = axes[1, 0]
@@ -357,7 +452,7 @@ def create_advanced_analysis(df):
     
     for country in df['country'].unique():
         country_data = df[df['country'] == country].dropna(subset=['year', 'renewables_share'])
-        if len(country_data) > 10:
+        if len(country_data) > 8:  # Reduced minimum requirement
             country_data = country_data.sort_values('year')
             start_share = country_data['renewables_share'].iloc[0]
             end_share = country_data['renewables_share'].iloc[-1]
@@ -384,6 +479,10 @@ def create_advanced_analysis(df):
         for bar, growth in zip(bars, growth_df['annual_growth']):
             ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height()/2,
                    f'{growth:.1f}%', ha='left', va='center', fontsize=8)
+    else:
+        ax.text(0.5, 0.5, 'Insufficient data for growth rate analysis', 
+               ha='center', va='center', transform=ax.transAxes)
+        ax.set_title('Top Countries by Renewable Energy Growth Rate')
     
     # 4. Future Projection based on current trends
     ax = axes[1, 1]
@@ -402,6 +501,9 @@ def create_advanced_analysis(df):
         future_years = np.array([2025, 2030, 2035, 2040, 2045, 2050])
         future_share = slope * future_years + intercept
         
+        # Ensure no negative values
+        future_share = np.maximum(future_share, 0)
+        
         # Plot historical and projection
         ax.plot(x, y, 'bo-', label='Historical', linewidth=2)
         ax.plot(future_years, future_share, 'ro--', label='Projection', linewidth=2)
@@ -416,6 +518,10 @@ def create_advanced_analysis(df):
         for year, share in zip(future_years, future_share):
             ax.annotate(f'{share:.1f}%', (year, share), 
                        xytext=(5, 5), textcoords='offset points', fontsize=8)
+    else:
+        ax.text(0.5, 0.5, 'Insufficient data for projection', 
+               ha='center', va='center', transform=ax.transAxes)
+        ax.set_title('Renewable Energy Projection')
     
     plt.tight_layout()
     return fig
@@ -437,19 +543,25 @@ def main():
         st.error("No data loaded. Please check the data file.")
         return
     
-    # Sidebar
-    st.sidebar.header("Analysis Options")
-    analysis_type = st.sidebar.selectbox(
-        "Select Analysis Type",
-        ["Comprehensive Trends", "Correlation Analysis", "Advanced Analysis", "Country Comparison", "Full Report"]
-    )
-    
-    # Country selection for detailed analysis
+    # Display available countries
     available_countries = sorted(df['country'].unique())
+    st.sidebar.header("Analysis Options")
+    
+    # Show major economies first in selection
+    major_economies = ['United States', 'China', 'Japan', 'Germany', 'United Kingdom', 
+                      'France', 'India', 'Brazil', 'Canada', 'Russia', 'Australia']
+    
+    # Create two lists: major economies and others
+    major_in_dataset = [c for c in major_economies if c in available_countries]
+    other_countries = [c for c in available_countries if c not in major_economies]
+    
+    # Default selection includes major economies
+    default_countries = major_in_dataset[:5] if len(major_in_dataset) >= 5 else major_in_dataset
+    
     selected_countries = st.sidebar.multiselect(
         "Select Countries for Detailed Analysis",
         available_countries,
-        default=available_countries[:5] if len(available_countries) >= 5 else available_countries
+        default=default_countries
     )
     
     # Year range selection
@@ -457,7 +569,7 @@ def main():
         "Select Year Range",
         min_value=int(df['year'].min()),
         max_value=int(df['year'].max()),
-        value=(1990, int(df['year'].max()))
+        value=(max(1990, int(df['year'].min())), int(df['year'].max()))
     )
     
     # Filter data based on selections
@@ -478,6 +590,10 @@ def main():
             st.metric("Years Covered", f"{filtered_df['year'].min()} - {filtered_df['year'].max()}")
         with col3:
             st.metric("Total Data Points", len(filtered_df))
+        
+        # Show available major economies
+        st.subheader("Major Economies in Dataset")
+        st.write(", ".join(major_in_dataset) if major_in_dataset else "No major economies found in dataset")
         
         st.dataframe(filtered_df.head(100))
     
@@ -584,6 +700,8 @@ def main():
             
             if country_stats:
                 st.table(pd.DataFrame(country_stats))
+        else:
+            st.info("Please select at least one country for comparison")
     
     else:  # Full Report
         st.header("Comprehensive Analysis Report")
