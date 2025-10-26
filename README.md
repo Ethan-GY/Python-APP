@@ -14,7 +14,7 @@ An interactive Streamlit app exploring the relationship between movie budget, ge
 
 ## 🌐 Live Demo
 - [Streamlit App](https://python-movies.streamlit.app/)
-- [GitHub Pages](https://github.com/Ethan-GY/Python-APP/blob/main/dataapp.py)
+- [GitHub Pages](https://github.com/Ethan-GY/Python-APP/blob/main/DataApp.py)
 
 ## 📁 How to Run
 1. `streamlit run dataapp.py`
