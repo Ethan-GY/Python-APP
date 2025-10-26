@@ -17,4 +17,4 @@ An interactive Streamlit app exploring the relationship between movie budget, ge
 - [GitHub Pages](https://github.com/Ethan-GY/Python-APP/blob/main/DataApp.py)
 
 ## 📁 How to Run
-1. `streamlit run dataapp.py`
+1. `streamlit run DataApp.py`
