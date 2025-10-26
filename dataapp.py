@@ -85,6 +85,10 @@ cbar.set_label('ROI (Revenue / Budget)', rotation=270, labelpad=15)
 
 st.pyplot(fig)
 
+# 示例：添加评分范围滑块
+rating_range = st.sidebar.slider("Filter by Rating", 0.0, 10.0, (6.0, 8.0))
+df_filtered = df_filtered[(df_filtered['vote_average'] >= rating_range[0]) & (df_filtered['vote_average'] <= rating_range[1])]
+
 # 展开 genres
 df_exploded = df_filtered.explode('genres_list').rename(columns={'genres_list': 'genre'})
 
