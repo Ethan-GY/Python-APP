@@ -25,7 +25,7 @@ import streamlit as st
 import warnings
 warnings.filterwarnings('ignore')
 
-# Set style for better visualizations
+# Set style for better visualization
 plt.style.use('default')
 sns.set_palette("husl")
 
